@@ -7,7 +7,7 @@ const chokidar = require('chokidar')
 const findCacheDir = require('find-cache-dir')
 const {pluck, indexBy, identity, prop, path: rpath} = require('ramda')
 
-function initDevBabelPusher({port, Espruino, esp, src, devServerIp}){
+function initDevBabelPusher({port, esp, src, devServerIp}){
   const outDir = src + '/../build'
 
   const runExpression = (port, expr)=>
@@ -17,9 +17,13 @@ function initDevBabelPusher({port, Espruino, esp, src, devServerIp}){
       )
     }) 
 
+  let watcher
+  let afterPush
 
-  const watch = ()=>{
-    const watcher = chokidar.watch(src)
+  const watch = ({afterPush: afterPushCallback})=>{
+    close()
+    afterPush = afterPushCallback
+    watcher = chokidar.watch(src)
     watcher.on('ready', function(){
       console.log('Dev Babel Pusher ready and watching...')
       watcher.on('change', (path, stats) => {
@@ -116,7 +120,7 @@ function initDevBabelPusher({port, Espruino, esp, src, devServerIp}){
     }
 
     console.log('push complete!!!')
-
+    afterPush && afterPush({pushedModuleMetaData: neededFileConfigs, allModuleModuleMetaData: sortedFileListConfig})
   }
 
 
@@ -265,8 +269,20 @@ function initDevBabelPusher({port, Espruino, esp, src, devServerIp}){
 
 
 
+  function close(){
+    if(watcher){
+      watcher.close()
+    }
+  }
+
+  function removeLocalCachedModuleMetaData(){
+    
+  }
+
   return {
-    watch
+    watch,
+    close,
+    removeLocalCachedModuleMetaData
   }
 }
 
