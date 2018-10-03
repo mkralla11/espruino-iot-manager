@@ -6,16 +6,12 @@ const spawn = require('react-dev-utils/crossSpawn');
 const args = process.argv.slice(2);
 
 const scriptIndex = args.findIndex(
-  x => x === 'init-dev' || x === 'init-prod' || x === 'dev-server' || x === 'dev-watch' || x === 'dev-cache' || x === 'dev-babel-watch'
+  x => x === 'dev-babel-watch'
 );
 const script = scriptIndex === -1 ? args[0] : args[scriptIndex];
 const nodeArgs = scriptIndex > 0 ? args.slice(0, scriptIndex) : [];
 
 switch (script) {
-  case 'init-dev':
-  case 'dev-server':
-  case 'dev-cache':
-  case 'dev-watch':
   case 'dev-babel-watch':
   case 'init-prod': {
     const result = spawn.sync(
