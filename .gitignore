@@ -1,0 +1,15 @@
+node_modules
+client
+dev-server
+dev-watcher
+scripts/dev-cache.js
+scripts/dev-server.js
+scripts/dev-watch.js
+scripts/init-dev.js
+scripts/try.js
+
+src/cleaner
+src/FlashString
+src/jsonHelpers
+src/webpackInMemory
+src/webpackInMemoryTry
