@@ -72,4 +72,6 @@ commandline flags include:
 if you are having trouble connecting to your esp8266 (or other IoT device) **the length of the USB / FTDI / Serial cable matters.** I know this sounds absolutely ridicolus (I thought so too), but when I first got started playing with IoT devices and communicating with them via different cables, I **always** found that **SHORTER CABLES WORKED WELL**, while longer USB cables could not consistently keep a connection, which was very, very frustrating. My current micro USB to USB cable is 2 feet and works every time.
 
 
+# License
 
+Licensed under MIT
