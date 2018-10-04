@@ -95,7 +95,7 @@ For a more practical sense of how rewarding running your code from Flash is, her
 | Total modules size minified         | **15 KB**      |
 | Total jsVars left after upload      | 900            |
 
-The most impressive aspect of these numbers is the fact that I've uploaded a total of 15 KB of modules seperately to Flash, and I'm still left with 900 of of 1700 jsVars. Also, one of my previous upload strategies attempted to concatenate all of my modules and write them directly .bootcde file uploaded to the device. This was great until I hit the 12KB file limit when writing to .bootcde, which ended up causing the watchdog timeout to repeatedly cause a reboot of my app. So using my new strategy was a huge win, seeing as I couldn't even *run* my large app without it.
+The most impressive aspect of these numbers is the fact that I've uploaded a total of **15 KB of modules** seperately to Flash, and I'm still left with 900 of of **1700 jsVars**. Also, one of my previous upload strategies attempted to concatenate all of my modules and write them directly to the .bootcde file uploaded to the device. This was great until I hit the 12KB file limit when writing to .bootcde, which ended up causing the watchdog timeout to repeatedly cause a reboot of my app. So using my new strategy was a huge win, seeing as I couldn't even *run* my large app without it.
 
 
 
