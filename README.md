@@ -4,7 +4,7 @@ a command line tool for espruino, esp8266, and esp32 that enables an exellent De
 
 - watching your IoT app code for changes
 - automatically transpiling app modules (via babel) from es6 after a code change
-- automatically uglifing / minifing (via uglify-js) your app code to it's smalls size
+- automatically uglifing / minifing (via uglify-js) your app code to it's smallest size
 - converting filenames to appropriate Storage-limited names on the device
 - auto-uploading your transpiled files to *Flash* on the device
 - creating a custom fileList of filenames and storing to Flash on the device to preserve module-boot order
