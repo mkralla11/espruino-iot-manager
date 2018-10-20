@@ -20,7 +20,7 @@ function initDevBabelPusher({port, esp, src, devServerIp}){
   let watcher
   let afterPush
 
-  const watch = ({afterPush: afterPushCallback})=>{
+  const watch = ({afterPush: afterPushCallback}={})=>{
     close()
     afterPush = afterPushCallback
     watcher = chokidar.watch(src)
@@ -75,6 +75,8 @@ function initDevBabelPusher({port, esp, src, devServerIp}){
     //
     // finally, we determine if we need to store the bootcode to the device, 
     // reset, and reload, OR just reset and reload
+
+
     const cachedFileConfigExists = await hasCachedFileListConfigFile()
     const fileListConfig = await getOrGenFileListConfig()
     const sortedFileListConfig = pluck(1)(fileListConfig.sortedConfig)
