@@ -219,7 +219,7 @@ function initDevBabelPusher({port, esp, src, devServerIp}){
   }
 
   async function genConfigFromPath(path){
-    const config = await transform(path, outDir, {babel: babelOptions, devServerIp})
+    const config = await transform(path, {babel: babelOptions, devServerIp})
     const sortedConfig = sortConfig(config)
     const data = {config, sortedConfig}
     return data

@@ -12,16 +12,15 @@ const tranformFileAsync = promisify(babel.transformFile.bind(babel))
 const fnv = require('fnv-plus')
 
 function genId(src){
-  return fnv.hash(src, 52).str().slice(0,8)
+  return fnv.hash(src, 64).str().slice(0,8)
 }
 
 function generateContentHash(content){
   return fnv.hash(content, 64).str()
 }
 
-module.exports = async (src, dest, options={}) => {
+module.exports = async (src, options={}) => {
   src = path.resolve(src)
-  dest = path.resolve(dest)
   
 
   // function t (file) {
@@ -31,7 +30,7 @@ module.exports = async (src, dest, options={}) => {
   //   })
   // }
 
-  let config = await transformAndFollow(src, dest, options)
+  let config = await transformAndFollow(src, options)
   return config
 }
 
@@ -58,12 +57,13 @@ module.exports = async (src, dest, options={}) => {
 //   }).reduce(fromEntry, {})
 // }
 
+const normalModRgx = /require\(['|"]\^\^\^(.+?)\^\^\^['|"]\)/g
+const espModRgx = /require\(['|"]espruino_module_(.+?)['|"]\)/g
 
 
 
 
-
-async function transformAndFollow(src, dest, options){
+async function transformAndFollow(src, options){
   const babelOpts = options.babel
   const devServerIp = options.devServerIp
   let inc = 0
@@ -95,8 +95,6 @@ async function transformAndFollow(src, dest, options){
     let promises = []
     let newPromises
     let code
-    cache[curSrc] = cache[curSrc] || {position: inc, filenameId: genId(curSrc)}
-    cache[curSrc].isLoaded = true;
     const filepath = await getFilepath(curSrc);
 
     // const dir = curSrc.replace(/\/(.+)(\.js)?$/, "")
@@ -104,7 +102,9 @@ async function transformAndFollow(src, dest, options){
 
     ({code} = await tranformFileAsync(filepath, {...babelOpts}));
     code = replaceDevIp(code);
-    
+
+    cache[curSrc] = cache[curSrc] || {position: inc}
+    cache[curSrc].isLoaded = true;
 
     ({code, promises: newPromises} = replaceAndCacheNormalRequires(curSrc, code));
     promises = promises.concat(newPromises);
@@ -173,8 +173,8 @@ async function transformAndFollow(src, dest, options){
 
   function replaceAndCacheEspruinoRequires(moduleName, code, opts={}){
     const promises = []
-    const rgx = opts.regex || /require\(['|"]espruino_module_(.+?)['|"]\)/g
-    code = code.replace(rgx, (match, ...captures)=>{
+    const rgx = opts.regex || espModRgx
+    code.replace(rgx, (match, ...captures)=>{
       // const offset = captures.pop()
       // const string = captures.pop()
       const moduleName = captures[0]
@@ -186,7 +186,7 @@ async function transformAndFollow(src, dest, options){
         cache[moduleName] = {
           position: inc,
           isLoaded: false,
-          filenameId: genId(moduleName),
+          // filenameId: genId(moduleName),
           espruinoModuleName: moduleName
         }
         prom = transform(moduleName)
@@ -199,9 +199,11 @@ async function transformAndFollow(src, dest, options){
         promises.push(prom)
       }
 
-      const req = `require('${cache[moduleName].filenameId}')`
-      return req
+      // const req = `require('${cache[moduleName].filenameId}')`
+      // return match
     })
+
+    // cache[moduleName].filenameId = genId(code)
     return {code, promises}
   }
 
@@ -209,7 +211,7 @@ async function transformAndFollow(src, dest, options){
   function replaceAndCacheNormalRequires(newSrc, code){
     const promises = []
 
-    code = code.replace(/require\(['|"]\^\^\^(.+?)\^\^\^['|"]\)/g, (match, ...captures)=>{
+    code.replace(normalModRgx, (match, ...captures)=>{
       // const offset = captures.pop()
       // const string = captures.pop()
       const newSrc = captures[0]
@@ -220,8 +222,7 @@ async function transformAndFollow(src, dest, options){
       if(!cache[newSrc] || !cache[newSrc].isLoaded){
         cache[newSrc] = {
           position: inc,
-          isLoaded: false,
-          filenameId: genId(newSrc)
+          isLoaded: false
         }
         prom = transform(newSrc)
       }
@@ -234,10 +235,10 @@ async function transformAndFollow(src, dest, options){
         promises.push(prom)
       }
 
-      const req = `require('${cache[newSrc].filenameId}')`
-      return req
+      // const req = `require('${cache[newSrc].filenameId}')`
+      // return match
     })
-
+    // cache[moduleName].filenameId = genId(code)
     return {code, promises}
   }
 
@@ -247,9 +248,34 @@ async function transformAndFollow(src, dest, options){
 
 
 
+  async function addFilenameIdsToCacheConfigsAndUpdate(){
+    const entries = Object.entries(cache)
+    for(const [moduleName, config] of entries){
+      config.filenameId = genId(config.code)
+    }
+    for(const [moduleName, config] of entries){
+      let code = config.code
+      code = code.replace(normalModRgx, getFilenameIdRequireViaModNameFromCache)
+      code = code.replace(espModRgx, getFilenameIdRequireViaModNameFromCache)
+      config.code = code
+    }
+  }
+
+  function getFilenameIdRequireViaModNameFromCache(match, ...captures){
+    const moduleName = captures[0]
+    cache[moduleName].filenameId
+    return `require('${cache[moduleName].filenameId}')`
+  }
+
+
 
   
   await transform(src)
+  await addFilenameIdsToCacheConfigsAndUpdate()
+
+
+
+
   cache[src].entryPoint = true
   console.log('complete in transformAndFollow!')
   return cache

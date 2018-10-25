@@ -3,7 +3,6 @@ client
 dev-server
 dev-watcher
 scripts/dev-cache.js
-scripts/dev-server.js
 scripts/dev-watch.js
 scripts/init-dev.js
 scripts/try.js
