@@ -46,6 +46,8 @@ Given a directory structure of your espruino app like the following:
     index.js                          // your entry point in src
 ```
 
+## Serial Application Code Update Usage
+
 Simply attach your device via micro USB to USB (or FTDI/serial to USB) to your laptop run the following command:
 
 ```
@@ -53,6 +55,24 @@ Simply attach your device via micro USB to USB (or FTDI/serial to USB) to your l
 ```
 
 This will kick off the first transpile, minify, and upload (if needed) of app code, as well as well as upload the needed .bootcde to load and execute your modules from Flash, then establish a cache for any modules changes that follow, and then finally setting up a filesystem watcher to run the transpile/minify/upload/cache flow again.
+
+
+## Over The Air (OTA) Application Code Updates Usage
+
+First, to load the OTA client boot code onto the device so you can perform OTA updates, simply attach your device via micro USB to USB (or FTDI/serial to USB) to your laptop run the following command:
+
+```
+  esp-iot init-ota-booter
+```
+
+Next, to start serving your application code over-the-air, start your in-memory complication watch server by running the following command:
+
+```
+  esp-iot ota-server
+```
+
+This will kick off the first transpile, minify, and upload (if needed) of app code, and start a server in order to serve your compiled app code from memory to the device when requested. Finally it sets up a filesystem watcher to run the transpile/minify/upload/cache flow again.
+
 
 commandline flags include:
 

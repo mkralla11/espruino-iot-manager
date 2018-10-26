@@ -6,9 +6,11 @@ const loadAndMinify = require('./loadAndMinify')
 const chokidar = require('chokidar')
 const findCacheDir = require('find-cache-dir')
 const {pluck, indexBy, identity, prop, path: rpath} = require('ramda')
+const generateFileListFromSortedConfig = require('../src/generateFileListFromSortedConfig')
 
 function initDevBabelPusher({port, esp, src, devServerIp}){
   const outDir = src + '/../build'
+  const fileListKeyName = "filelist"
 
   const runExpression = (port, expr)=>
     new Promise((resolve)=>{
@@ -128,14 +130,14 @@ function initDevBabelPusher({port, esp, src, devServerIp}){
 
   async function getFileListOnDevice(){
     try{
-      let fileList = await runExpression(port, "require('Storage').read('filelist')")
+      let fileList = await runExpression(port, `require('Storage').read('${fileListKeyName}')`)
       console.log('trying', fileList)
       fileList = fileList.replace(/(< <<|>> >.*)/g, "")
       console.log('after trying', fileList)
       fileList = JSON.parse(fileList)
       console.log('last trying', fileList)
       // Double parse? that's weird...
-      if(!fileList.filelist){
+      if(!fileList.fileList){
         fileList = JSON.parse(fileList)
       }
       return fileList.fileList || JSON.stringify({fileList: []})
@@ -152,8 +154,16 @@ function initDevBabelPusher({port, esp, src, devServerIp}){
   }
 
   async function storeBootCodeToDevice(){
-    const flashLoaderRuntime = await loadAndMinify(__dirname + '/../src/FlashLoader/index.js', {babelOptions})
-
+    const flashLoaderRuntime = await loadAndMinify(
+      __dirname + '/../src/FlashLoader/index.js', 
+      {
+        babelOptions, 
+        replace: {
+          rgx: /process.env.FILE_LIST_KEY_NAME/,
+          replaceWith: `"${fileListKeyName}"`
+        }
+      }
+    )
     console.log('flashing FlashLoader runtime:', flashLoaderRuntime)
     expr = "E.setBootCode(" + JSON.stringify(flashLoaderRuntime) + ",true),reset(),load()"
     await runExpression(port, expr)
@@ -174,16 +184,8 @@ function initDevBabelPusher({port, esp, src, devServerIp}){
   }
 
   async function storeFileListOnDeviceFromFileConfigs(fileConfigs){
-    const fileList = []
-    for (const data of fileConfigs){
-      let {filenameId, entryPoint} = data
-      if(entryPoint){
-        console.log('found entry point for filelist!', filenameId)
-        // filenameId = 'entry'
-      }
-      fileList.push(filenameId)
-    }
-    const expr = "reset(),require('Storage').erase('filelist'),require('Storage').write('filelist', " + JSON.stringify({fileList}) + ")"
+    const fileList = generateFileListFromSortedConfig(fileConfigs)
+    const expr = `reset(),require('Storage').erase('${fileListKeyName}'),require('Storage').write('${fileListKeyName}', ` + JSON.stringify({fileList}) + ")"
     console.log('the run expression', expr)
     await runExpression(port, expr)
   }

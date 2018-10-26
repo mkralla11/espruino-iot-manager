@@ -14,7 +14,7 @@
 
 E.on('init', function() {
   const S = require("Storage")
-  const files = S.readJSON('filelist') || {fileList: []}
+  const files = S.readJSON(process.env.FILE_LIST_KEY_NAME) || {fileList: []}
   console.log('files', files)
   files.fileList.forEach((name)=>{
     console.log('adding', name)

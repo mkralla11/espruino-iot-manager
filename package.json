@@ -4,7 +4,7 @@
   "description": "",
   "main": "./bin/espruino-iot-manager.js",
   "scripts": {
-    "test": "mocha --reporter spec --inspect-brk --require babel-core/register ./client/**/*.test.js"
+    "test": "mocha --reporter spec --require babel-core/register ./client/**/*.test.js ./init-ota-booter/**/*.test.js"
   },
   "author": "",
   "license": "MIT",

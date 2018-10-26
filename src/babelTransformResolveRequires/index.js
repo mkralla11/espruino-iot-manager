@@ -57,9 +57,9 @@ module.exports = async (src, options={}) => {
 //   }).reduce(fromEntry, {})
 // }
 
-const normalModRgx = /require\(['|"]\^\^\^(.+?)\^\^\^['|"]\)/g
+const normalModRgx = /require\(['|"]\^\^\^(.+?)\^\^\^(\^\^\^)?['|"]\)/g
 const espModRgx = /require\(['|"]espruino_module_(.+?)['|"]\)/g
-
+const nodeModulesRgx = /require\(['|"](?!(espruino_module_|\^\^\^|\.|\/))(.+?)['|"]\)/g
 
 
 
@@ -83,6 +83,9 @@ async function transformAndFollow(src, options){
     else if(cache[curSrc] && cache[curSrc].espruinoModuleName){
       await loadAndParseEspruinoModule(curSrc)
     }
+    else if(cache[curSrc] && cache[curSrc].nodeModuleName){
+      await loadAndParseNodeModule(curSrc)
+    }
     else{
       await loadAndParse(curSrc) 
     }
@@ -91,7 +94,7 @@ async function transformAndFollow(src, options){
 
 
   async function loadAndParse(curSrc){
-    console.log('the src', curSrc)
+    // console.log('the src', curSrc)
     let promises = []
     let newPromises
     let code
@@ -102,12 +105,18 @@ async function transformAndFollow(src, options){
 
     ({code} = await tranformFileAsync(filepath, {...babelOpts}));
     code = replaceDevIp(code);
+    code = replaceEnvVars(code);
 
     cache[curSrc] = cache[curSrc] || {position: inc}
     cache[curSrc].isLoaded = true;
 
     ({code, promises: newPromises} = replaceAndCacheNormalRequires(curSrc, code));
     promises = promises.concat(newPromises);
+
+    ({code, promises: newPromises} = replaceAndCacheNodeModulesRequires(curSrc, code));
+    promises = promises.concat(newPromises);
+
+
 
     ({code, promises: newPromises} = replaceAndCacheEspruinoRequires(curSrc, code));
     promises = promises.concat(newPromises);
@@ -121,6 +130,55 @@ async function transformAndFollow(src, options){
     // console.log('final code', out)
     // console.log('all proms', promises)
     await Promise.all(promises)
+  }
+
+  function replaceEnvVars(code){
+    if(options.replace){
+      for(replaceConfig of options.replace){
+        // {
+        //   rgx: /process.env.FILE_LIST_KEY_NAME/,
+        //   replaceWith: `"${fileListKeyName}"`
+        // }
+        code = code.replace(replaceConfig.rgx, replaceConfig.replaceWith)
+      }
+    }
+    return code
+  }
+
+  async function loadAndParseNodeModule(moduleName){
+    try{
+      // console.log('trying loadAndParseNodeModule')
+      let promises = []
+      let newPromises
+      let code
+      cache[moduleName].isLoaded = true
+
+      const fullpath = require.resolve(moduleName, {paths: [src]});
+      // console.log('the full path', fullpath);
+      // code = await fs.readFile(fullpath);
+
+      ({code} = await tranformFileAsync(fullpath, {...babelOpts}));
+
+      // console.log('node_module code found!', moduleName, code);
+
+      // since we KNOW we are within a node module,
+      // just assume all required modules from here on out is 
+      // a node module as well
+      ({code, promises: newPromises} = replaceAndCacheNodeModulesRequires(moduleName, code));
+      // console.log('after trans')
+      promises = promises.concat(newPromises);
+      ({code} = UglifyJS.minify(code));
+
+      cache[moduleName].code = code
+      cache[moduleName].totalBytes = getBytesTotal(code)
+      cache[moduleName].contentHash = generateContentHash(code)
+
+      await Promise.all(promises)
+    }
+    catch(e){
+      console.log('error!', e)
+      console.log('node_module code not found!', moduleName)
+    }
   }
 
 
@@ -208,6 +266,49 @@ async function transformAndFollow(src, options){
   }
 
 
+  function replaceAndCacheNodeModulesRequires(newSrc, code){
+    const promises = []
+    // console.log('the code Checked', code)
+    code.replace(nodeModulesRgx, (match, ...captures)=>{
+      // const offset = captures.pop()
+      // const string = captures.pop()
+      const newSrc = captures[1]
+
+      // let c = code
+      // console.log(c)
+      // debugger
+      inc += 1
+
+      console.log('the node module capture', newSrc)
+
+      let prom 
+      if(!cache[newSrc] || !cache[newSrc].isLoaded){
+        cache[newSrc] = {
+          position: inc,
+          isLoaded: false,
+          nodeModuleName: newSrc
+        }
+        prom = transform(newSrc)
+      }
+      else{
+        cache[newSrc].position = inc
+      }
+      
+
+      if(prom){
+        promises.push(prom)
+      }
+
+      // const req = `require('${cache[newSrc].filenameId}')`
+      // return match
+    })
+    // cache[moduleName].filenameId = genId(code)
+    return {code, promises}
+  }
+
+
+
+
   function replaceAndCacheNormalRequires(newSrc, code){
     const promises = []
 
@@ -215,6 +316,9 @@ async function transformAndFollow(src, options){
       // const offset = captures.pop()
       // const string = captures.pop()
       const newSrc = captures[0]
+      // let c = code
+      // console.log(c)
+      // debugger
       inc += 1
 
       console.log('the normal module capture', newSrc)
@@ -248,40 +352,63 @@ async function transformAndFollow(src, options){
 
 
 
+
+
   async function addFilenameIdsToCacheConfigsAndUpdate(){
     const entries = Object.entries(cache)
     for(const [moduleName, config] of entries){
       config.filenameId = genId(config.code)
     }
+
+    replaceForCaptureIdx0 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 0})
+    replaceForCaptureIdx1 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 1})
+
     for(const [moduleName, config] of entries){
       let code = config.code
-      code = code.replace(normalModRgx, getFilenameIdRequireViaModNameFromCache)
-      code = code.replace(espModRgx, getFilenameIdRequireViaModNameFromCache)
+      code = code.replace(nodeModulesRgx, replaceForCaptureIdx1)
+      code = code.replace(normalModRgx, replaceForCaptureIdx0)
+      code = code.replace(espModRgx, replaceForCaptureIdx0)
+      
       config.code = code
     }
   }
 
-  function getFilenameIdRequireViaModNameFromCache(match, ...captures){
-    const moduleName = captures[0]
-    cache[moduleName].filenameId
-    return `require('${cache[moduleName].filenameId}')`
+  function createGetFilenameIdRequireViaModNameFromCache({captureIdx}){
+    return (match, ...captures)=>{
+      // console.log('matcher', match)
+      // console.log('the captures rep', captures, captureIdx)
+      const moduleName = captures[captureIdx]
+      cache[moduleName].filenameId
+      return `require('${cache[moduleName].filenameId}')`
+    }
   }
 
+  function throwIfCodeOverTotalAllowedBytes(){
+    if(options.throwIfCodeOverTotalAllowedBytes){
+      const entries = Object.entries(cache)
+      for(const [moduleName, config] of entries){
+        if(config.totalBytes > options.throwIfCodeOverTotalAllowedBytes){
+          throw new Error(`Module '${ moduleName}' is ${config.totalBytes} bytes! Over the allowed ${options.throwIfCodeOverTotalAllowedBytes} byte amount.`)
+        }
+      }
+    }
+  }
 
 
   
   await transform(src)
   await addFilenameIdsToCacheConfigsAndUpdate()
-
+  throwIfCodeOverTotalAllowedBytes()
 
 
 
   cache[src].entryPoint = true
-  console.log('complete in transformAndFollow!')
+  console.log('complete in transformAndFollow!', cache)
   return cache
 }
 
 async function getFilepath(src){
+  console.log('trying to get file', src)
   try{
     await fs.readFile(src)
     console.log('found file from path', src)
@@ -294,7 +421,7 @@ async function getFilepath(src){
       return src + "/index.js"
     }
     catch(e){
-      // console.log('falling back to node_modules', src)
+      console.log('falling back to node_modules', src)
       return src
     }
   }
