@@ -9,6 +9,14 @@ const sortCompiledScriptConfig = require('../src/sortCompiledScriptConfig')
 const loadAndMinify = require('../dev-babel-pusher/loadAndMinify')
 const generateFileListFromSortedConfig = require('../src/generateFileListFromSortedConfig')
 const {pluck} = require('ramda')
+const UglifyJS = require("uglify-js")
+
+// const fsUnlinkFuncStr = `require('fs').unlinkSync`
+// const fsWriteFileFuncStr = `require('fs').writeFile`
+
+
+const fsUnlinkFuncStr = `require('Storage').erase`
+const fsWriteFileFuncStr = `require('Storage').write`
 
 function initOtaBooter({
   esp,
@@ -32,16 +40,84 @@ function initOtaBooter({
     await setupEsp()
     const config = await compileOtaBooter()
     const sortedFileListConfig = pluck(1)(config.sortedConfig)
+    await initializeFsArea()
+    // await smartDelBootLoader(sortedFileListConfig)
     await storeBooterFileListFromConfigOnDevice(sortedFileListConfig)
     await storeBooterScriptsFromConfigOnDevice(sortedFileListConfig)
     await storeBootCdeForBooterToLoadOnDevice()
 
   }
 
+  async function smartDelBootLoader(config){
+    const newBootLoaderFileList = generateFileListFromSortedConfig(config)
+    const smartDelBootLoaderPath = __dirname + '/smartDelBootLoader'
+    console.log('newBootLoaderFileList', newBootLoaderFileList)
+    const smartDelScriptsConfig = await transform(
+      smartDelBootLoaderPath, 
+      {
+        babel: getBabelOptions({src: smartDelBootLoaderPath}), 
+        throwIfCodeOverTotalAllowedBytes: 4000,
+        replace: [
+          {
+            rgx: /process.env.NEW_BOOTLOADER_FILE_LIST/,
+            replaceWith: JSON.stringify(newBootLoaderFileList),
+          },
+          {
+            rgx: /process.env.BL_FILE_LIST_KEY_NAME/,
+            replaceWith: `"${bootcdeFileListKeyName}"`
+          }
+        ]
+      }
+    )
+    let sortedSmartDelScriptsConfig = sortCompiledScriptConfig(smartDelScriptsConfig)
+    sortedSmartDelScriptsConfig = JSON.stringify(pluck(1)(sortedSmartDelScriptsConfig))
+
+    console.log('running smartDelBootLoader:', sortedSmartDelScriptsConfig)
+
+    let expr = `
+      (function(){
+        for(var config of ${sortedSmartDelScriptsConfig}){
+          console.log('adding smbl script', config.filenameId);
+          Modules.addCached(config.filenameId, config.code);
+        }
+      })()
+    `;
+
+
+     
+     console.log('running expr:', expr);
+
+    await runExpression(port, expr)
+  }
+
+  async function initializeFsArea(){
+    const expr = `
+      (function(){try {
+        var fs = require('fs')
+        fs.readdirSync();
+       } catch (e) { //'Uncaught Error: Unable to mount media : NO_FILESYSTEM'
+        console.log('Formatting FS - only need to do once');
+        E.flashFatFS({ format: true });
+      }})()
+    `
+    await runExpression(port, expr)
+  }
+
 
   async function storeBooterFileListFromConfigOnDevice(config){
     const fileList = generateFileListFromSortedConfig(config)
-    const expr = `reset(),require('Storage').erase('${bootcdeFileListKeyName}'),require('Storage').write('${bootcdeFileListKeyName}', ` + JSON.stringify({fileList}) + ")"
+    const expr = `(function(){
+      reset();
+      try{
+        ${fsUnlinkFuncStr}('${bootcdeFileListKeyName}');
+      }
+      catch(e){
+        console.log("'${bootcdeFileListKeyName}' file not exist")
+      }
+      ${fsWriteFileFuncStr}('${bootcdeFileListKeyName}', '${JSON.stringify({fileList})}');
+    })()
+    `
+
     console.log('the fileList run expression', expr)
     await runExpression(port, expr)
   }
@@ -54,9 +130,39 @@ function initOtaBooter({
         console.log('found entry point!', filenameId)
       }
 
-      const expr = "require('Storage').write(" + `"${filenameId}"` + ", " + JSON.stringify(code) + ")"
-      console.log('the run expression', expr)
-      await runExpression(port, expr)
+      async function store(){
+        const expr = `
+          
+          (function(){
+            reset();
+            var a = 0;
+            function store(){
+              
+              var r = ${fsWriteFileFuncStr}("${filenameId}", ` + JSON.stringify(code) + `);
+              
+              if(!r && a < 10){
+                a++;
+                console.log('could not open file! ${filenameId}, trying again...');
+                setTimeout(function(){
+                  store();
+                }, 50);
+              }
+              else if(a >= 10){
+                console.log('giving up!!!');
+              }
+            }
+            store();
+
+          })()
+        `
+        console.log('the run expression', expr)
+        const res = await runExpression(port, expr)
+        if(/FILE_STORE_ERROR/.test(res)){
+          console.log(`ERROR STORING FILE!!! RETRYING ${filenameId}`)
+          await store()
+        }
+      }
+      await store()
     }
   }
 
@@ -75,7 +181,9 @@ function initOtaBooter({
     )
 
     console.log('flashing FlashLoader runtime:', flashLoaderRuntime)
-    expr = "E.setBootCode(" + JSON.stringify(flashLoaderRuntime) + ",true),reset(),load()"
+    expr = "require('Storage').write('.bootcde', " + JSON.stringify(flashLoaderRuntime) + "),reset(),load()"
+
+
     await runExpression(port, expr)
   }
 
@@ -86,7 +194,8 @@ function initOtaBooter({
   }
 
   async function genConfigFromPath(src){
-    const ip = await fetchLocalIp()
+    let ip = await fetchLocalIp()
+    ip = `http://${ip}`
     const cdnUrlPort = CDN_URL_PORT ? `:${CDN_URL_PORT}` : ''
 
     const config = await transform(

@@ -12,18 +12,20 @@ module.exports = function({src}){
       ]
     ],
     "plugins": [
-      [require.resolve("babel-plugin-module-resolver"), {
-        "root": [src],
-      }],
-      require.resolve("babel-plugin-syntax-dynamic-import"),
-      [require.resolve("babel-plugin-import-redirect"),
-      {
-        "suppressResolveWarning": true,
-        "redirect": {
-          [`${src}/(.*)`]: `^^^${src}/$1^^^`,
-          [`^\/node_modules/(.+)`]: `espruino_module_$1`
+      [
+      require.resolve("babel-plugin-module-resolver"), 
+        {
+          "root": [src],
         }
-      }]
+      ],
+      [
+        require.resolve("babel-plugin-transform-for-of-as-array"), 
+        {
+          "loose": true
+        }
+      ],
+      require.resolve("babel-plugin-syntax-dynamic-import"),
+
     ]
   }
 }

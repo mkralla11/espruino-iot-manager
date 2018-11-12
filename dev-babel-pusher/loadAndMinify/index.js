@@ -1,6 +1,6 @@
 const babel = require("babel-core")
 const {promisify} = require('util')
-const UglifyJS = require('uglify-js')
+const UglifyJS = require("uglify-js")
 
 const tranformFileAsync = promisify(babel.transformFile.bind(babel))
 

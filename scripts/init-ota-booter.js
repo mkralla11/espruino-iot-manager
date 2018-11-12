@@ -1,7 +1,7 @@
 const argOrDefault = require('../src/argOrDefault')
 const initOtaBooter = require('../init-ota-booter')
 const esp = require("espruino")
-
+const path = require('path')
 const argv = process.argv
 
 const port = argOrDefault(argv, '--port', '/dev/tty.SLAB_USBtoUART')

@@ -4,19 +4,29 @@ const babel = require("babel-core")
 // const shortid = require('shortid')
 const {promisify} = require('util')
 const rp = require('request-promise-native')
-const UglifyJS = require('uglify-js')
-
+const UglifyJS = require("uglify-js")
+const {mapObjIndexed} = require('ramda')
 const tranformFileAsync = promisify(babel.transformFile.bind(babel))
 
 // shortid.characters('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$@')
 const fnv = require('fnv-plus')
 
+const alpha = 'abcdefghijklmnopqrstuvwxyz'
+const digits = /(\d)/g
+
 function genId(src){
-  return fnv.hash(src, 64).str().slice(0,8)
+  let res = fnv.hash(src, 64).str().slice(0,8)
+  console.log('fnv hash', res)
+  res = res.replace(digits, (match)=>{
+    // debugger
+    return alpha[parseInt(match)]
+  })
+  return res
 }
 
 function generateContentHash(content){
-  return fnv.hash(content, 64).str()
+  // return fnv.hash(content, 64).str()
+  return
 }
 
 module.exports = async (src, options={}) => {
@@ -57,10 +67,10 @@ module.exports = async (src, options={}) => {
 //   }).reduce(fromEntry, {})
 // }
 
-const normalModRgx = /require\(['|"]\^\^\^(.+?)\^\^\^(\^\^\^)?['|"]\)/g
-const espModRgx = /require\(['|"]espruino_module_(.+?)['|"]\)/g
-const nodeModulesRgx = /require\(['|"](?!(espruino_module_|\^\^\^|\.|\/))(.+?)['|"]\)/g
-
+const normalModRgx = /require\(['|"](\^\^\^)?(\..+?)(\^\^\^)?(\^\^\^)?['|"]\)/g
+// const espModRgx = /require\(['|"]espruino_module_(.+?)['|"]\)/g
+const nodeModulesRgx = /require\(['|"](?!(\.|\/))(.+?)['|"]\)/g
+const espModRgx = nodeModulesRgx
 
 
 async function transformAndFollow(src, options){
@@ -77,18 +87,38 @@ async function transformAndFollow(src, options){
   // }
 
   async function transform(curSrc){
+    // console.log('attempting now', curSrc)
+
+    try{
     if(cache[curSrc] && cache[curSrc].isLoaded){
+      if(curSrc === 'ws'){
+        console.log('short circ ws')
+      }
       return
     }
     else if(cache[curSrc] && cache[curSrc].espruinoModuleName){
+      if(curSrc === 'ws'){
+        console.log('espr ws')
+      }
       await loadAndParseEspruinoModule(curSrc)
     }
     else if(cache[curSrc] && cache[curSrc].nodeModuleName){
+      if(curSrc === 'ws'){
+        console.log('node ws')
+      }
       await loadAndParseNodeModule(curSrc)
     }
     else{
+      if(curSrc === 'ws'){
+        console.log('fallback ws')
+      }
+      console.log('fall back to loadAndParse', curSrc)
       await loadAndParse(curSrc) 
     }
+  }
+  catch(e){
+    console.log('waaaa', e)
+  }
   }
 
 
@@ -101,35 +131,57 @@ async function transformAndFollow(src, options){
     const filepath = await getFilepath(curSrc);
 
     // const dir = curSrc.replace(/\/(.+)(\.js)?$/, "")
-  
+    let alreadyLoaded
 
-    ({code} = await tranformFileAsync(filepath, {...babelOpts}));
+    Object.values(cache).map(({targetSrc, isLoaded})=>{
+      console.log('checking', targetSrc, curSrc, isLoaded)
+      if(targetSrc === curSrc && isLoaded){
+        alreadyLoaded = true
+      }
+    })  
+
+    if(alreadyLoaded){
+      return 'file already loaded! ' + curSrc 
+    }
+
+    try{
+      ({code} = await tranformFileAsync(filepath, {...babelOpts}));
+    }catch(e){
+      console.log('blloo', e)
+    }
+    // console.log('the code now', code)
     code = replaceDevIp(code);
     code = replaceEnvVars(code);
-
+    // console.log('the code after now', code)
     cache[curSrc] = cache[curSrc] || {position: inc}
     cache[curSrc].isLoaded = true;
+    // 
 
-    ({code, promises: newPromises} = replaceAndCacheNormalRequires(curSrc, code));
-    promises = promises.concat(newPromises);
+    ({promises: newPromises} = replaceAndCacheNormalRequires(curSrc, code));
+    // promises = promises.concat(newPromises);
+    await Promise.all(newPromises);
 
-    ({code, promises: newPromises} = replaceAndCacheNodeModulesRequires(curSrc, code));
-    promises = promises.concat(newPromises);
+    ({promises: newPromises} = replaceAndCacheEspruinoRequires(curSrc, code));
+    // promises = promises.concat(newPromises);
+    await Promise.all(newPromises);
 
-
-
-    ({code, promises: newPromises} = replaceAndCacheEspruinoRequires(curSrc, code));
-    promises = promises.concat(newPromises);
-
-    ({code} = UglifyJS.minify(code));
-    cache[curSrc].code = code
-    cache[curSrc].totalBytes = getBytesTotal(code)
-    cache[curSrc].contentHash = generateContentHash(code)
+    ({promises: newPromises} = replaceAndCacheNodeModulesRequires(curSrc, code));
+    // promises = promises.concat(newPromises);
+    await Promise.all(newPromises);
+    // console.log('the code before min', code);
+    let {code: res} = UglifyJS.minify(code);
+    if(!res){
+      
+    }
+    cache[curSrc].code = res
+    // console.log('the code', curSrc, res)
+    cache[curSrc].totalBytes = getBytesTotal(res)
+    cache[curSrc].contentHash = generateContentHash(res)
 
 
     // console.log('final code', out)
-    // console.log('all proms', promises)
-    await Promise.all(promises)
+    console.log('all proms', promises)
+    // await Promise.all(promises)
   }
 
   function replaceEnvVars(code){
@@ -151,32 +203,56 @@ async function transformAndFollow(src, options){
       let promises = []
       let newPromises
       let code
-      cache[moduleName].isLoaded = true
+      console.log('is loaded?', moduleName, cache[moduleName].isLoaded)
+      
 
       const fullpath = require.resolve(moduleName, {paths: [src]});
-      // console.log('the full path', fullpath);
+      if(fullpath[0] !== '/'){
+        throw new Error(`Not a node module: ${fullpath}`)
+      }
+
+      if(moduleName === 'es6-symbol/polyfill'){
+        
+      }
+      cache[fullpath].isLoaded = true
+      console.log('the full path', fullpath);
       // code = await fs.readFile(fullpath);
-
+      try{
       ({code} = await tranformFileAsync(fullpath, {...babelOpts}));
-
+      }catch(e){
+        console.log('is this it?')
+      }
       // console.log('node_module code found!', moduleName, code);
 
       // since we KNOW we are within a node module,
       // just assume all required modules from here on out is 
       // a node module as well
-      ({code, promises: newPromises} = replaceAndCacheNodeModulesRequires(moduleName, code));
+      ({code, promises: newPromises} = replaceAndCacheNormalRequires(fullpath, code));
+      // promises = promises.concat(newPromises);
+      await Promise.all(newPromises);
+
+      ({code, promises: newPromises} = replaceAndCacheEspruinoRequires(fullpath, code));
+      // promises = promises.concat(newPromises);
+      await Promise.all(newPromises);
+
+      ({code, promises: newPromises} = replaceAndCacheNodeModulesRequires(fullpath, code));
+      // promises = promises.concat(newPromises);
+      await Promise.all(newPromises);
+
+
       // console.log('after trans')
       promises = promises.concat(newPromises);
       ({code} = UglifyJS.minify(code));
 
       cache[moduleName].code = code
+      // console.log('the code', moduleName, code)
       cache[moduleName].totalBytes = getBytesTotal(code)
       cache[moduleName].contentHash = generateContentHash(code)
 
-      await Promise.all(promises)
+      // await Promise.all(promises)
     }
     catch(e){
-      console.log('error!', e)
+      // console.log('error!', e)
       console.log('node_module code not found!', moduleName)
     }
   }
@@ -187,8 +263,18 @@ async function transformAndFollow(src, options){
       let promises = []
       let newPromises
       let code
-      cache[moduleName].isLoaded = true
+      console.log('running loadAndParseEspruinoModule', moduleName)
+/*      if(moduleName === 'ws'){
+        console.log(`${moduleName} is already loaded!`)
+        return
+      }*/
+      
       code = await getOrFetchEspruinoCodeFor(moduleName);
+      if(cache[moduleName].isLoaded){
+        return
+      }
+      cache[moduleName].isLoaded = true;
+      
       
       ({code} = babel.transform(code, babelOpts));
 
@@ -197,20 +283,23 @@ async function transformAndFollow(src, options){
       // since we KNOW we are within an espruino module,
       // just assume all required modules from here on out is 
       // an espruino module as well
-      ({code, promises: newPromises} = replaceAndCacheEspruinoRequires(moduleName, code, {regex: /require\(['|"](.+?)['|"]\)/g}));
+      ({promises: newPromises} = replaceAndCacheEspruinoRequires(moduleName, code));
+      await Promise.all(newPromises);
 
-      promises = promises.concat(newPromises);
       ({code} = UglifyJS.minify(code));
-
+      console.log('uglified', code);
       cache[moduleName].code = code
+      // console.log('the code', moduleName, code)
       cache[moduleName].totalBytes = getBytesTotal(code)
       cache[moduleName].contentHash = generateContentHash(code)
 
-      await Promise.all(promises)
+      // await Promise.all(promises)
     }
     catch(e){
       if(e.statusCode === 404){
         console.log('No module on espruino site, must be native:', moduleName)
+        
+
         cache[moduleName].native = true
         cache[moduleName].isLoaded = true
 
@@ -220,34 +309,59 @@ async function transformAndFollow(src, options){
         ({code} = UglifyJS.minify(code));
 
         cache[moduleName].code = code
+        // console.log('the code', moduleName, code)
         cache[moduleName].totalBytes = getBytesTotal(code)
         cache[moduleName].contentHash = generateContentHash(code)
+      }
+      else{
+        console.log('different', e)
       }
     }
   }
 
-
-
+  const espWhitelist = ['http', 'Storage', 'fs', 'Wifi', 'crypto', 'net']
+  function isInEspruinoCoreWhitelist(moduleName){
+    for(curMod of espWhitelist){
+      if(moduleName === curMod){
+        return true
+      }
+    }
+  }
 
   function replaceAndCacheEspruinoRequires(moduleName, code, opts={}){
     const promises = []
     const rgx = opts.regex || espModRgx
+
     code.replace(rgx, (match, ...captures)=>{
       // const offset = captures.pop()
       // const string = captures.pop()
-      const moduleName = captures[0]
+      const moduleName = captures[1]
       inc += 1
 
       console.log('the espruino_module capture', moduleName)
       let prom
       if(!cache[moduleName] || !cache[moduleName].isLoaded){
-        cache[moduleName] = {
-          position: inc,
-          isLoaded: false,
-          // filenameId: genId(moduleName),
-          espruinoModuleName: moduleName
-        }
-        prom = transform(moduleName)
+        prom = new Promise(async (resolve, reject)=>{
+          try{
+            if(isInEspruinoCoreWhitelist(moduleName) || (await getOrFetchEspruinoCodeFor(moduleName))){
+              cache[moduleName] = {
+                position: inc,
+                isLoaded: false,
+                // filenameId: genId(moduleName),
+                espruinoModuleName: moduleName
+              }
+              
+              await transform(moduleName)
+              resolve()
+            }else{
+              throw new Error(`not an espruino module ${moduleName}`)
+            }
+          }
+          catch(e){
+            await transform(moduleName)
+            resolve(e)
+          }
+        })
       }
       else{
         cache[moduleName].position = inc
@@ -272,26 +386,35 @@ async function transformAndFollow(src, options){
     code.replace(nodeModulesRgx, (match, ...captures)=>{
       // const offset = captures.pop()
       // const string = captures.pop()
-      const newSrc = captures[1]
+      let moduleName = captures[1]
 
       // let c = code
       // console.log(c)
-      // debugger
+      // 
       inc += 1
 
-      console.log('the node module capture', newSrc)
-
+      console.log('the node module capture', moduleName)
       let prom 
-      if(!cache[newSrc] || !cache[newSrc].isLoaded){
-        cache[newSrc] = {
+      try{
+        moduleName = require.resolve(moduleName, {paths: [newSrc]});
+        
+        if(!cache[moduleName] || !cache[moduleName].isLoaded){
+          cache[moduleName] = {
+            position: inc,
+            isLoaded: false,
+            nodeModuleName: moduleName
+          }
+          prom = transform(moduleName)
+        }
+
+      }
+      catch(e){
+        cache[moduleName] = {
           position: inc,
           isLoaded: false,
-          nodeModuleName: newSrc
+          espruinoModuleName: moduleName
         }
-        prom = transform(newSrc)
-      }
-      else{
-        cache[newSrc].position = inc
+        prom = transform(moduleName)
       }
       
 
@@ -310,34 +433,52 @@ async function transformAndFollow(src, options){
 
 
   function replaceAndCacheNormalRequires(newSrc, code){
-    const promises = []
+    let newSrcDir = newSrc
+    if(!fs.lstatSync(newSrcDir).isDirectory()){
+      newSrcDir = path.dirname(newSrcDir)
+    }
 
+    const promises = []
+    // console.log(code)
     code.replace(normalModRgx, (match, ...captures)=>{
       // const offset = captures.pop()
       // const string = captures.pop()
-      const newSrc = captures[0]
+      let targetSrc = captures[1]
       // let c = code
       // console.log(c)
-      // debugger
+      // 
       inc += 1
 
-      console.log('the normal module capture', newSrc)
-      let prom 
-      if(!cache[newSrc] || !cache[newSrc].isLoaded){
-        cache[newSrc] = {
-          position: inc,
-          isLoaded: false
+      let targetSrcFullPath = targetSrc
+      try{
+        targetSrcFullPath = require.resolve(targetSrc, {paths: [newSrcDir]})
+      
+        console.log('the normal module capture', targetSrc)
+        let prom 
+        if(!cache[targetSrcFullPath] || !cache[targetSrcFullPath].isLoaded){
+          cache[targetSrcFullPath] = {
+            targetSrc,
+            position: inc,
+            isLoaded: false
+          }
+          prom = transform(targetSrcFullPath)
         }
-        prom = transform(newSrc)
-      }
-      else{
-        cache[newSrc].position = inc
-      }
+        else{
+          cache[targetSrcFullPath].position = inc
+        }
       
 
       if(prom){
         promises.push(prom)
       }
+
+      }
+      catch(e){
+        return {code, promises}
+      }
+
+
+      
 
       // const req = `require('${cache[newSrc].filenameId}')`
       // return match
@@ -357,29 +498,76 @@ async function transformAndFollow(src, options){
   async function addFilenameIdsToCacheConfigsAndUpdate(){
     const entries = Object.entries(cache)
     for(const [moduleName, config] of entries){
-      config.filenameId = genId(config.code)
+      if(config.code){
+        config.filenameId = genId(config.code)
+      }
+      else{
+        console.log('going to blow', config, cache)
+      }
+      
     }
 
-    replaceForCaptureIdx0 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 0})
-    replaceForCaptureIdx1 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 1})
+    // replaceForCaptureIdx0 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 0})
+    // replaceForCaptureIdx1 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 1})
 
     for(const [moduleName, config] of entries){
       let code = config.code
-      code = code.replace(nodeModulesRgx, replaceForCaptureIdx1)
-      code = code.replace(normalModRgx, replaceForCaptureIdx0)
-      code = code.replace(espModRgx, replaceForCaptureIdx0)
+      code = code.replace(nodeModulesRgx, createGetFilenameIdRequireViaModNameFromCache({moduleName, captureIdx: 1}))
+      code = code.replace(normalModRgx, createGetFilenameIdRequireViaModNameFromCache({moduleName, captureIdx: 1}))
+      // code = code.replace(espModRgx, replaceForCaptureIdx1)
       
       config.code = code
     }
   }
 
-  function createGetFilenameIdRequireViaModNameFromCache({captureIdx}){
+  function createGetFilenameIdRequireViaModNameFromCache({moduleName: parentModuleName, captureIdx}){
     return (match, ...captures)=>{
       // console.log('matcher', match)
       // console.log('the captures rep', captures, captureIdx)
-      const moduleName = captures[captureIdx]
-      cache[moduleName].filenameId
-      return `require('${cache[moduleName].filenameId}')`
+      let moduleName = captures[captureIdx]
+      console.log('checker', moduleName)
+      if(moduleName === 'es6-symbol/polyfill'){
+        
+      }
+      if(!cache[moduleName]){
+
+        let moduleNameDir = parentModuleName
+        let turnIntoDir
+        try{
+          turnIntoDir = !fs.lstatSync(parentModuleName).isDirectory() && fs.lstatSync(parentModuleName).isFile()
+        }
+        catch(e){
+          turnIntoDir = false
+        }
+
+
+        if(turnIntoDir){
+          try{
+            moduleNameDir = path.dirname(parentModuleName)
+          }catch(e){
+            console.log('wtf!!!')
+          }
+        }
+        try{
+          moduleName = require.resolve(moduleName, {paths: [moduleNameDir]})
+        }
+        catch(e){
+          console.log('here!!!')
+        }
+      }
+      console.log('after checker', moduleName)
+      try{
+      if(moduleName !== parentModuleName){
+        return `require('${cache[moduleName].filenameId}')`
+      }
+      else{
+        return `require('${moduleName}')`
+      }
+      }
+      catch(e){
+        console.log(cache, moduleName)
+        throw e
+      }
     }
   }
 
@@ -388,6 +576,7 @@ async function transformAndFollow(src, options){
       const entries = Object.entries(cache)
       for(const [moduleName, config] of entries){
         if(config.totalBytes > options.throwIfCodeOverTotalAllowedBytes){
+          console.log(cache)
           throw new Error(`Module '${ moduleName}' is ${config.totalBytes} bytes! Over the allowed ${options.throwIfCodeOverTotalAllowedBytes} byte amount.`)
         }
       }
@@ -442,7 +631,7 @@ async function getOrFetchEspruinoCodeFor(moduleName){
 
 
 function getBytesTotal(str){
-  // console.log('the str', str)
+  console.log('the str', str)
   return Buffer.byteLength(str, 'utf8')
 }
 

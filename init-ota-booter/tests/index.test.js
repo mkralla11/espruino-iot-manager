@@ -47,6 +47,7 @@ describe('initOtaBooter', function() {
       
       const otaBooter = initOtaBooter(opts)
       await otaBooter.setup()
+      debugger
       assert.equal(opts.esp._ranCache.length > 10, true)
       
     })

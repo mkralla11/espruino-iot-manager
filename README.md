@@ -1,6 +1,6 @@
 # Espruino IoT Manager
 
-a command line tool for espruino, esp8266 (4MB version), and esp32 that enables an exellent Developer Experience for these micro-controllers (and others) by:
+a command line tool for espruino, and esp32 that enables an exellent Developer Experience for these micro-controllers (and others) by:
 
 - watching your IoT app code for changes
 - automatically transpiling app modules (via babel) from es6 after a code change
@@ -47,6 +47,7 @@ Given a directory structure of your espruino app like the following:
 ```
 
 ## Serial Application Code Update Usage
+(Suitable boards: espruino, esp8266, esp32)
 
 Simply attach your device via micro USB to USB (or FTDI/serial to USB) to your laptop run the following command:
 
@@ -58,7 +59,7 @@ This will kick off the first transpile, minify, and upload (if needed) of app co
 
 
 ## Over The Air (OTA) Application Code Updates Usage
-
+(Suitable boards: esp32)
 First, to load the OTA client boot code onto the device so you can perform OTA updates, simply attach your device via micro USB to USB (or FTDI/serial to USB) to your laptop run the following command:
 
 ```
@@ -117,6 +118,11 @@ For a more practical sense of how rewarding running your code from Flash is, her
 
 The most impressive aspect of these numbers is the fact that I've uploaded a total of **15 KB of modules** seperately to Flash, and I'm still left with 900 of of **1700 jsVars**. Also, one of my previous upload strategies attempted to concatenate all of my modules and write them directly to the .bootcde file uploaded to the device. This was great until I hit the 12KB file limit when writing to .bootcde, which ended up causing the watchdog timeout to repeatedly cause a reboot of my app. So using my new strategy was a huge win, seeing as I couldn't even *run* my large app without it.
 
+## Wipe out all files
+
+require('fs').readdirSync('').forEach(function(item){
+require('fs').unlink(item)})
+require('Storage').eraseAll()
 
 
 # License
