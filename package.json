@@ -1,6 +1,6 @@
 {
   "name": "espruino-iot-manager",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "",
   "main": "./bin/espruino-iot-manager.js",
   "scripts": {
