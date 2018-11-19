@@ -110,7 +110,7 @@ For a more practical sense of how rewarding running your code from Flash is, her
 | My Current Real-world **App Code**                             | Details        |
 | ----                                                           | -----          |
 | Total modules (OTA booter on device)                           | 14             |
-| Total modules) (app code)                                      | 13             |
+| Total modules (app code)                                       | 13             |
 | Largest individual module size minified (OTA booter on device) | 1.750 KB       |
 | Largest individual module size minified (app code)             | 3.850 KB       |
 | Total modules size minified (OTA booter on device)             | **8.796 KB**   |
