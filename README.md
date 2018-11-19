@@ -87,6 +87,17 @@ commandline flags include:
 
     --port /dev/tty.SLAB_USBtoUART           
                                         // default: /dev/tty.SLAB_USBtoUART. The path to the port that your IoT device is connected to. (on the commandline, if you are unsure of your port, run `ls /dev/tty.*` to show available ports to try) 
+
+
+
+
+  esp-iot ota-server
+    --port 5858
+                                        // default: 5858. The port that the server should run on (should match the above --cdn-url-port using via the init-ota-booter command).
+
+    --src /path/to/src/index.js
+                                        // default: `${process.cwd()}/src/index.js`. This should be the filepath to the entry point of your app code.
+
 ```
 
 
