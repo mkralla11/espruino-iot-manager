@@ -1,5 +1,4 @@
 node_modules
-client
 dev-server
 dev-watcher
 scripts/dev-cache.js

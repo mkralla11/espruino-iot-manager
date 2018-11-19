@@ -1,0 +1,1 @@
+global.Symbol = require('es6-symbol/polyfill')
