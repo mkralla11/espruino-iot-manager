@@ -23,9 +23,6 @@ a command line tool for espruino, and esp32 that enables an exellent Developer E
   Node >= 10
 ```
 
-```
-
-```
 
 Also, make sure you flash your device with the appropriate espruino firmware before attempting to load your app code on your device. Instructions for flashing to your specific IoT device can be found at https://www.espruino.com/Other+Boards.
 
