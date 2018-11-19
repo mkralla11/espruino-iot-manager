@@ -49,7 +49,7 @@ Given a directory structure of your espruino app like the following:
 ```
 
 ## Over The Air (OTA) Application Code Updates Usage
-(Suitable boards: esp32)
+(Suitable boards: esp32, or espruino board with external flash and wifi)
 First, to load the OTA client boot code onto the device so you can perform OTA updates, simply attach your device via micro USB to USB (or FTDI/serial to USB) to your laptop run the following command:
 
 ```
