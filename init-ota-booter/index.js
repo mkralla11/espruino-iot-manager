@@ -37,14 +37,14 @@ function initOtaBooter({
   const bootcdeFileListKeyName = "bootFL"
 
   async function setup(){
-    await setupEsp()
+    // await setupEsp()
     const config = await compileOtaBooter()
     const sortedFileListConfig = pluck(1)(config.sortedConfig)
-    await initializeFsArea()
+    // await initializeFsArea()
     // await smartDelBootLoader(sortedFileListConfig)
-    await storeBooterFileListFromConfigOnDevice(sortedFileListConfig)
-    await storeBooterScriptsFromConfigOnDevice(sortedFileListConfig)
-    await storeBootCdeForBooterToLoadOnDevice()
+    // await storeBooterFileListFromConfigOnDevice(sortedFileListConfig)
+    // await storeBooterScriptsFromConfigOnDevice(sortedFileListConfig)
+    // await storeBootCdeForBooterToLoadOnDevice()
 
   }
 
