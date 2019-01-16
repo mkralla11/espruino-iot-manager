@@ -59,7 +59,8 @@ module.exports =function bootLocal({S, M, get, cdnUrl}){
 
           }
           let prom
-          if(!data){
+          let hasWifi = require('../smartWifi')().hasWifi()
+          if(!data && hasWifi){
             prom = get(
               cdnUrl + '/' + name + '.js'
             )
@@ -68,7 +69,13 @@ module.exports =function bootLocal({S, M, get, cdnUrl}){
             prom = Promise.resolve(data)
           }
           prom.then((data)=>{
-            console.log('writing', name)
+            if(!data && !hasWifi){
+              console.log('no data or wifi, trying again', name)
+              setTimeout(()=>
+                loadNow(idx)
+              , 1000)
+              return
+            }
             S.writeRetry(name, data).then(()=>{
               setTimeout(()=>
                 loadNow(idx + 1)

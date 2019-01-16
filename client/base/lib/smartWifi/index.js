@@ -26,48 +26,69 @@ function smartWifi(opts){
         this.attemptId = opts.random().toString()
         
         this.updateCreds(ssid, options, cb)
-        this.retryConnect(0, this.attemptId)
+        this.retryConnect(0, this.attemptId).then(()=>{
+          this.callAndRmCbs()
+        }).catch((e)=>{
+          this.callAndRmCbs(e)
+        })
+      },
+      hasWifi: function(){
+        return Wifi.getDetails().status === 'connected'
       },
 
       retryConnect: function(curCredIdx, attemptId){
         const that = this
-        return this.aGetDetails().then((details)=>{
-          const cred = that.creds[curCredIdx]
-          // always try to connect on the first attempt,
-          // all other attempts should only try connecting if 
-          // the current status is NOT CONNECTED
-          const {ssid, options} = cred || {}
-          console.log('trying to connect...')
-          if(details.status === 'connected' && ssid && ssid === details.ssid){
-            console.log('already connected!', ssid)
-            that.callCbs()
-          }
-          else if(curCredIdx === 0 || attemptId === this.attemptId && cred){
-            return that.aConnect(ssid, options).then(()=>{
-              attemptId === that.attemptId ? that.callCbs() : null
-            }).catch((e)=>{
-              if(that.creds.length === curCredIdx + 1){
-                // if there are no more creds to try,
-                // call callbacks with error
-                attemptId === that.attemptId ? that.callCbs(e) : null
+        return new Promise((resolve, reject)=>{
+          function retry(){
+            console.log('conn attempt:', curCredIdx)
+            that.aGetDetails().then((details)=>{
+              const cred = that.creds[curCredIdx]
+              // always try to connect on the first attempt,
+              // all other attempts should only try connecting if 
+              // the current status is NOT CONNECTED
+              const {ssid, options} = cred || {}
+              console.log('trying to connect...')
+              if(details.status === 'connected' && ssid && ssid === details.ssid){
+                console.log('already connected!', ssid)
+                resolve()
               }
-              else{
-                return that.retryConnect(curCredIdx + 1, attemptId)
+              else if(curCredIdx === 0 || attemptId === that.attemptId && cred){
+
+                that.aConnect(ssid, options).then(()=>{
+                  attemptId === that.attemptId ? resolve() : null
+                }).catch((e)=>{
+                  if(that.creds.length === curCredIdx + 1){
+                    // if there are no more creds to try,
+                    // call callbacks with error
+                    attemptId === that.attemptId ? reject(e) : null
+                  }
+                  else{
+                    curCredIdx += 1
+                    setTimeout(retry, 2000)
+                  }
+                })
               }
             })
           }
+
+          retry()
         })
+
+
         
       },
 
-      callCbs(e){
+      callAndRmCbs(e){
         e ? e.errorType = "WIFI" : null
         // console.log('calling callbacks', this.creds)
-        this.creds.forEach(({cbs})=>
+        this.creds.forEach((cred)=>{
+          const {cbs} = cred
+          cred.cbs = []
           cbs.forEach((cb)=>
             cb(e)
           )
-        )
+        })
+
       },
 
       updateCreds(ssid, options, cb){
@@ -122,4 +143,6 @@ smartWifi._getCreds = function(){
   return self && self.creds
 }
 
+
+global.smartWifi = smartWifi
 module.exports = smartWifi

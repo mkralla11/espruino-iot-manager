@@ -1,6 +1,7 @@
 module.exports = function({src}){
   return {
     babelrc: false,
+    comments: false,
     "presets": [
       [
         require.resolve("babel-preset-env"),

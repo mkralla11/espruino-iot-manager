@@ -40,6 +40,7 @@ function initOtaBooter({
     await setupEsp()
     const config = await compileOtaBooter()
     const sortedFileListConfig = pluck(1)(config.sortedConfig)
+    await initializeDefaultWifiUsernameAndPassword(WIFI_USERNAME, WIFI_PASSWORD, CDN_URL)
     await initializeFsArea()
     // await smartDelBootLoader(sortedFileListConfig)
     await storeBooterFileListFromConfigOnDevice(sortedFileListConfig)
@@ -101,6 +102,24 @@ function initOtaBooter({
       }})()
     `
     await runExpression(port, expr)
+  }
+
+
+  async function initializeDefaultWifiUsernameAndPassword(u, p, cdnUrl){
+    if(u && p){
+      const expr = `
+        (function(){
+          try {
+            var s = require('Storage');
+            s.write('D_WU', '${u}');
+            s.write('D_WP', '${p}');
+            s.write('D_CDN', '${cdnUrl}');
+         } catch (e) {
+          console.log('Could not store default wifi u/p and CDN_URL');
+        }})()
+      `
+      await runExpression(port, expr)
+    }
   }
 
 

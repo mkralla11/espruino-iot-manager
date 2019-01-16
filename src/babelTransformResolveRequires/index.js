@@ -4,11 +4,12 @@ const babel = require("babel-core")
 // const shortid = require('shortid')
 const {promisify} = require('util')
 const rp = require('request-promise-native')
-const UglifyJS = require("uglify-js")
-const {mapObjIndexed} = require('ramda')
+const Terser = require("terser")
+const {mapObjIndexed, find, propEq, map} = require('ramda')
 const tranformFileAsync = promisify(babel.transformFile.bind(babel))
+const transformCode = babel.transform.bind(babel)
+const sortCompiledScriptConfig = require('../sortCompiledScriptConfig')
 
-// shortid.characters('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$@')
 const fnv = require('fnv-plus')
 
 const alpha = 'abcdefghijklmnopqrstuvwxyz'
@@ -33,50 +34,27 @@ module.exports = async (src, options={}) => {
   src = path.resolve(src)
   
 
-  // function t (file) {
-  //   return transform(file, src, dest, {
-  //     filename:file,
-  //     ...options
-  //   })
-  // }
+
 
   let config = await transformAndFollow(src, options)
   return config
 }
 
-// async function addEspruinoModuleCode(config){
-//   const configNestedArray = Object.entries(config)
 
-//   let proms = configNestedArray.map(([k, data])=>{
-//     if(data.espruinoModuleName){
-//       return getOrFetchEspruinoCodeFor(data.espruinoModuleName)
-//     }
-//   })
 
-//   proms = proms.filter((prom)=>
-//     !!prom
-//   )
-
-//   const espruinoModules = await Promise.all(proms)
-
-//   return configNestedArray.map(([k, data])=>{
-//     if(data.espruinoModuleName){
-//       data.code = espruinoModules.shift()
-//     }
-//     return [k, data]
-//   }).reduce(fromEntry, {})
-// }
-
-const normalModRgx = /require\(['|"](\^\^\^)?(\..+?)(\^\^\^)?(\^\^\^)?['|"]\)/g
+const moduleRgx = /require\(['|"](.+?)['|"]\)/g
 // const espModRgx = /require\(['|"]espruino_module_(.+?)['|"]\)/g
-const nodeModulesRgx = /require\(['|"](?!(\.|\/))(.+?)['|"]\)/g
-const espModRgx = nodeModulesRgx
+// const nodeModulesRgx = /require\(['|"](?!(\.|\/))(.+?)['|"]\)/g
+// const nodeModulesRgx = normalModRgx
+// const espModRgx = nodeModulesRgx
 
 
 async function transformAndFollow(src, options){
+  const entryPoint = src
   const babelOpts = options.babel
   const devServerIp = options.devServerIp
   let inc = 0
+  const positionCache = {}
   const cache = {}
   // cache = {
   //   [filename]: {
@@ -86,78 +64,107 @@ async function transformAndFollow(src, options){
   //   }
   // }
 
-  async function transform(curSrc){
-    try{
-      if(cache[curSrc] && cache[curSrc].isLoaded){
+  async function transform(curSrc, requiredFrom){
+    await loadModules(curSrc, requiredFrom)
+  }
+
+  async function loadModules(curSrc, requiredFrom){
+
+    if(isInEspruinoCoreWhitelist(curSrc)){
+      src = curSrc
+
+      cache[src] = cache[src] || {required: []}
+      cache[src].src = src
+      cache[requiredFrom].required.push(src) 
+      cache[src].espruinoModule = true
+
+      if(cache[src].isLoading){
         return
       }
-      else if(cache[curSrc] && cache[curSrc].espruinoModuleName){
-        await loadAndParseEspruinoModule(curSrc)
-      }
-      else if(cache[curSrc] && cache[curSrc].nodeModuleName){
-        await loadAndParseNodeModule(curSrc)
+      cache[src].isLoading = true
+
+
+
+
+
+      await loadEspModule(src)
+    }
+    else{
+
+
+      let {found, src} = await getFilepath(curSrc, requiredFrom)
+
+
+
+      if(found){
+        cache[src] = cache[src] || {required: []}
+        if(requiredFrom === entryPoint){
+          cache[src].entryPoint = true
+        }
+        else{
+          cache[requiredFrom].required.push(src) 
+        }
+
+        if(cache[src].isLoading){
+          return
+        }
+        cache[src].isLoading = true
+        cache[src].src = src
+
+
+        await loadNormalModule(src)
       }
       else{
-        await loadAndParse(curSrc) 
+        throw new Error(`Module not found and is not esp module: ${curSrc}`)
       }
+    }
+  }
+
+  async function loadNormalModule(src){
+    // let rawCode = (await fs.readFile(src)).toString()
+    let {code: rawCode} = await tranformFileAsync(src, {...babelOpts})
+    
+    rawCode = replaceDevIp(rawCode)
+    rawCode = replaceEnvVars(rawCode)
+
+    cache[src].rawCode = rawCode
+
+    await parseModuleAndFollow(rawCode, src)
+  }
+
+
+  async function loadEspModule(src){
+    try{
+      let rawCode = await getOrFetchEspruinoCodeFor(src)
+      // do not babelify crypto!!!
+      if(src !== 'crypto'){
+        let {code} = transformCode(rawCode, {...babelOpts})
+        rawCode = code
+      }
+      cache[src].rawCode = rawCode
+      await parseModuleAndFollow(rawCode, src)
+
     }
     catch(e){
-      console.log('error in transform', e)
-    }
-  }
-
-
-
-  async function loadAndParse(curSrc){
-    // console.log('the src', curSrc)
-    let promises = []
-    let newPromises
-    let code
-    const filepath = await getFilepath(curSrc);
-
-    // const dir = curSrc.replace(/\/(.+)(\.js)?$/, "")
-    let alreadyLoaded
-
-    Object.values(cache).map(({targetSrc, isLoaded})=>{
-      if(targetSrc === curSrc && isLoaded){
-        alreadyLoaded = true
+      if(e.statusCode === 404){
+        console.log('No module on espruino site, must be native:', src)
+        cache[src].native = true
+        let rawCode = `module.exports = require('${src}');`;
+        cache[src].rawCode = rawCode
       }
-    })  
-
-    if(alreadyLoaded){
-      return 'file already loaded! ' + curSrc 
     }
-
-    try{
-      ({code} = await tranformFileAsync(filepath, {...babelOpts}));
-    }catch(e){
-      console.log('error tranformFileAsync', e)
-    }
-    code = replaceDevIp(code);
-    code = replaceEnvVars(code);
-
-    cache[curSrc] = cache[curSrc] || {position: inc}
-    cache[curSrc].isLoaded = true;
-    // 
-
-    ({promises: newPromises} = replaceAndCacheNormalRequires(curSrc, code));
-
-    await Promise.all(newPromises);
-
-    ({promises: newPromises} = replaceAndCacheEspruinoRequires(curSrc, code));
-
-    await Promise.all(newPromises);
-
-    ({promises: newPromises} = replaceAndCacheNodeModulesRequires(curSrc, code));
-    await Promise.all(newPromises);
-
-    let {code: res} = UglifyJS.minify(code);
-
-    cache[curSrc].code = res
-
-    cache[curSrc].totalBytes = getBytesTotal(res)
-    cache[curSrc].contentHash = generateContentHash(res)
   }
+
+
+  async function parseModuleAndFollow(rawCode, src){
+    const proms = []
+    rawCode.replace(moduleRgx, (match, ...captures)=>{
+      const moduleName = captures[0]
+      proms.push(transform(moduleName, src))
+    })
+    await Promise.all(proms)
+  }
+
 
   function replaceEnvVars(code){
     if(options.replace){
@@ -172,116 +179,9 @@ async function transformAndFollow(src, options){
     return code
   }
 
-  async function loadAndParseNodeModule(moduleName){
-    try{
-      // console.log('trying loadAndParseNodeModule')
-      let promises = []
-      let newPromises
-      let code
-      
-
-      const fullpath = require.resolve(moduleName, {paths: [src]});
-      if(fullpath[0] !== '/'){
-        throw new Error(`Not a node module: ${fullpath}`)
-      }
-
-      if(moduleName === 'es6-symbol/polyfill'){
-        
-      }
-      cache[fullpath].isLoaded = true
-      try{
-        ({code} = await tranformFileAsync(fullpath, {...babelOpts}));
-      }catch(e){
-        console.log('error tranformFileAsync', e)
-      }
-
-      // since we KNOW we are within a node module,
-      // just assume all required modules from here on out is 
-      // a node module as well
-      ({code, promises: newPromises} = replaceAndCacheNormalRequires(fullpath, code));
-      await Promise.all(newPromises);
-
-      ({code, promises: newPromises} = replaceAndCacheEspruinoRequires(fullpath, code));
-      await Promise.all(newPromises);
-
-      ({code, promises: newPromises} = replaceAndCacheNodeModulesRequires(fullpath, code));
-      await Promise.all(newPromises);
 
 
-      promises = promises.concat(newPromises);
-      ({code} = UglifyJS.minify(code));
-
-      cache[moduleName].code = code
-      cache[moduleName].totalBytes = getBytesTotal(code)
-      cache[moduleName].contentHash = generateContentHash(code)
-
-      // await Promise.all(promises)
-    }
-    catch(e){
-      // console.log('error!', e)
-      console.log('node_module code not found!', moduleName)
-    }
-  }
-
-
-  async function loadAndParseEspruinoModule(moduleName){
-    try{
-      let promises = []
-      let newPromises
-      let code
-
-      
-      code = await getOrFetchEspruinoCodeFor(moduleName);
-      if(cache[moduleName].isLoaded){
-        return
-      }
-      cache[moduleName].isLoaded = true;
-      
-      
-      ({code} = babel.transform(code, babelOpts));
-
-      console.log('espruino code found!', moduleName);
-
-      // since we KNOW we are within an espruino module,
-      // just assume all required modules from here on out is 
-      // an espruino module as well
-      ({promises: newPromises} = replaceAndCacheEspruinoRequires(moduleName, code));
-      await Promise.all(newPromises);
-
-      ({code} = UglifyJS.minify(code));
-      console.log('uglified', code);
-      cache[moduleName].code = code
-      // console.log('the code', moduleName, code)
-      cache[moduleName].totalBytes = getBytesTotal(code)
-      cache[moduleName].contentHash = generateContentHash(code)
-
-      // await Promise.all(promises)
-    }
-    catch(e){
-      if(e.statusCode === 404){
-        console.log('No module on espruino site, must be native:', moduleName)
-        
-
-        cache[moduleName].native = true
-        cache[moduleName].isLoaded = true
-
-        let code = `
-          module.exports = require('${moduleName}');
-        `;
-        ({code} = UglifyJS.minify(code));
-
-        cache[moduleName].code = code
-        // console.log('the code', moduleName, code)
-        cache[moduleName].totalBytes = getBytesTotal(code)
-        cache[moduleName].contentHash = generateContentHash(code)
-      }
-      else{
-        console.log('error loadAndParseEspruinoModule', e)
-      }
-    }
-  }
-
-  const espWhitelist = ['http', 'Storage', 'fs', 'Wifi', 'crypto', 'net']
+  const espWhitelist = ['http', 'Storage', 'fs', 'Wifi', 'crypto', 'net', 'ws']
   function isInEspruinoCoreWhitelist(moduleName){
     for(curMod of espWhitelist){
       if(moduleName === curMod){
@@ -290,193 +190,69 @@ async function transformAndFollow(src, options){
     }
   }
 
-  function replaceAndCacheEspruinoRequires(moduleName, code, opts={}){
-    const promises = []
-    const rgx = opts.regex || espModRgx
-
-    code.replace(rgx, (match, ...captures)=>{
-
-      const moduleName = captures[1]
-      inc += 1
-
-      // console.log('the espruino_module capture', moduleName)
-      let prom
-      if(!cache[moduleName] || !cache[moduleName].isLoaded){
-        prom = new Promise(async (resolve, reject)=>{
-          try{
-            if(isInEspruinoCoreWhitelist(moduleName) || (await getOrFetchEspruinoCodeFor(moduleName))){
-              cache[moduleName] = {
-                position: inc,
-                isLoaded: false,
-                // filenameId: genId(moduleName),
-                espruinoModuleName: moduleName
-              }
-              
-              await transform(moduleName)
-              resolve()
-            }else{
-              throw new Error(`not an espruino module ${moduleName}`)
-            }
-          }
-          catch(e){
-            await transform(moduleName)
-            resolve(e)
-          }
-        })
-      }
-      else{
-        cache[moduleName].position = inc
-      }
-
-      if(prom){
-        promises.push(prom)
-      }
-
-      // const req = `require('${cache[moduleName].filenameId}')`
-      // return match
-    })
-
-    // cache[moduleName].filenameId = genId(code)
-    return {code, promises}
-  }
-
-
-  function replaceAndCacheNodeModulesRequires(newSrc, code){
-    const promises = []
-    code.replace(nodeModulesRgx, (match, ...captures)=>{
-
-      let moduleName = captures[1]
-
-      inc += 1
-
-      let prom 
-      try{
-        moduleName = require.resolve(moduleName, {paths: [newSrc]});
-        
-        if(!cache[moduleName] || !cache[moduleName].isLoaded){
-          cache[moduleName] = {
-            position: inc,
-            isLoaded: false,
-            nodeModuleName: moduleName
-          }
-          prom = transform(moduleName)
-        }
-
-      }
-      catch(e){
-        cache[moduleName] = {
-          position: inc,
-          isLoaded: false,
-          espruinoModuleName: moduleName
-        }
-        prom = transform(moduleName)
-      }
-      
-
-      if(prom){
-        promises.push(prom)
-      }
-
-      // const req = `require('${cache[newSrc].filenameId}')`
-      // return match
-    })
-    // cache[moduleName].filenameId = genId(code)
-    return {code, promises}
-  }
-
-
-
-
-  function replaceAndCacheNormalRequires(newSrc, code){
-    let newSrcDir = newSrc
-    if(!fs.lstatSync(newSrcDir).isDirectory()){
-      newSrcDir = path.dirname(newSrcDir)
-    }
-
-    const promises = []
-    code.replace(normalModRgx, (match, ...captures)=>{
-      let targetSrc = captures[1]
-
-      inc += 1
-
-      let targetSrcFullPath = targetSrc
-      try{
-        targetSrcFullPath = require.resolve(targetSrc, {paths: [newSrcDir]})
-      
-        // console.log('the normal module capture', targetSrc)
-        let prom 
-        if(!cache[targetSrcFullPath] || !cache[targetSrcFullPath].isLoaded){
-          cache[targetSrcFullPath] = {
-            targetSrc,
-            position: inc,
-            isLoaded: false
-          }
-          prom = transform(targetSrcFullPath)
-        }
-        else{
-          cache[targetSrcFullPath].position = inc
-        }
-      
-
-      if(prom){
-        promises.push(prom)
-      }
-
-      }
-      catch(e){
-        return {code, promises}
-      }
-
-
-      
-
-      // const req = `require('${cache[newSrc].filenameId}')`
-      // return match
-    })
-    // cache[moduleName].filenameId = genId(code)
-    return {code, promises}
-  }
 
   function replaceDevIp(code){
     return code.replace(/process.env.DEV_SERVER_IP/, `"${devServerIp}"`)
   }
 
-
+  const minOpts = {
+    module: true,
+    mangle: {
+      toplevel: true,
+    },
+    nameCache: {}
+  }
 
 
 
   async function addFilenameIdsToCacheConfigsAndUpdate(){
-    const entries = Object.entries(cache)
-    for(const [moduleName, config] of entries){
-      if(config.code){
-        config.filenameId = genId(config.code)
-      }
-      else{
-        throw new Error(`Code does not existing for ${moduleName}!`)
-      }
-    }
+    addPositions(cache)
+    const entries = sortCompiledScriptConfig(cache)
+    // debugger
+    // for(const [moduleName, config] of entries){
+    //   if(config.code){
+    //     config.filenameId = genId(config.code)
+    //   }
+    //   else{
+    //     throw new Error(`Code does not existing for ${moduleName}!`)
+    //   }
+    // }
 
     // replaceForCaptureIdx0 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 0})
     // replaceForCaptureIdx1 = createGetFilenameIdRequireViaModNameFromCache({captureIdx: 1})
-
     for(const [moduleName, config] of entries){
-      let code = config.code
-      code = code.replace(nodeModulesRgx, createGetFilenameIdRequireViaModNameFromCache({moduleName, captureIdx: 1}))
-      code = code.replace(normalModRgx, createGetFilenameIdRequireViaModNameFromCache({moduleName, captureIdx: 1}))
-      // code = code.replace(espModRgx, replaceForCaptureIdx1)
-      
-      config.code = code
+      if(config.native){
+        config.filenameId = moduleName
+        config.code = config.rawCode
+      }
+      else{
+
+        let rawCode = config.rawCode
+        if(!rawCode){
+          throw new Error(`rawCode not created for config: ${JSON.stringify(config)}`)
+        }
+        let code = rawCode
+        // don't minify crypto :( it breaks shit
+        if(moduleName !== 'crypto'){
+          const res = Terser.minify({
+            [moduleName]: rawCode
+          }, minOpts)
+          code = res.code
+        }
+        code = code.replace(moduleRgx, createGetFilenameIdRequireViaModNameFromCache({moduleName, captureIdx: 0}))
+        config.filenameId = genId(code)
+
+        config.code = code
+      }
+      config.totalBytes = getBytesTotal(config.code)
     }
   }
 
   function createGetFilenameIdRequireViaModNameFromCache({moduleName: parentModuleName, captureIdx}){
     return (match, ...captures)=>{
       let moduleName = captures[captureIdx]
-      if(moduleName === 'es6-symbol/polyfill'){
-        
-      }
-      if(!cache[moduleName]){
 
+      if(!cache[moduleName]){
         let moduleNameDir = parentModuleName
         let turnIntoDir
         try{
@@ -543,7 +319,7 @@ async function transformAndFollow(src, options){
 
 
   
-  await transform(src)
+  await transform(src, src)
   await addFilenameIdsToCacheConfigsAndUpdate()
   throwIfCodeOverTotalAllowedBytes()
   logStats()
@@ -555,23 +331,14 @@ async function transformAndFollow(src, options){
   return cache
 }
 
-async function getFilepath(src){
-  // console.log('trying to get file', src)
+async function getFilepath(src, requiredFrom){
   try{
-    await fs.readFile(src)
-    // console.log('found file from path', src)
-    return src
+    requiredFrom = requiredFrom.replace(/\/index\.js$/, "")
+    src = require.resolve(src, {paths: [requiredFrom]})
+    return {found: true, src}
   }
   catch(e){
-    try{
-      await fs.readFile(src + "/index.js")
-      // console.log('refound file from path', src + "/index.js")
-      return src + "/index.js"
-    }
-    catch(e){
-      // console.log('falling back to node_modules', src)
-      return src
-    }
+    return {found: false}
   }
 }
 
@@ -591,6 +358,31 @@ async function getOrFetchEspruinoCodeFor(moduleName){
 
 function getBytesTotal(str){
   return Buffer.byteLength(str, 'utf8')
+}
+
+
+function addPositions(cache){
+  const entrySrc = find(propEq('entryPoint', true), Object.values(cache)).src
+  let position = 0
+  const processed = {}
+  addPositionAndFollow(entrySrc)
+  
+
+  function addPositionAndFollow(curSrc, curTree){
+    cache[curSrc].position = position
+    console.log(curSrc, position)
+    // if(processed[curSrc]){
+    //   return
+    // }
+    processed[curSrc] = true
+    if(cache[curSrc].required && cache[curSrc].required.length){
+      // console.log('requiring:', cache[curSrc].required)
+      map((item)=>{
+        position += 1
+        addPositionAndFollow(item)
+      }, cache[curSrc].required)
+    }
+  }
 }
 
 

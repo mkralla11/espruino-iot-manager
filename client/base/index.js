@@ -19,8 +19,8 @@ const booter = require('./lib/booter')
     },
     reset: reset,
     load: load,
-    cdnUrl: process.env.CDN_URL,
-    wifiUsername: process.env.WIFI_USERNAME,
-    wifiPassword: process.env.WIFI_PASSWORD
+    cdnUrl: require('Storage').read('D_CDN'),
+    wifiUsername: require('Storage').read('D_WU'),
+    wifiPassword: require('Storage').read('D_WP')
   })
 // })

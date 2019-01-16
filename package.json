@@ -4,7 +4,7 @@
   "description": "",
   "main": "./bin/espruino-iot-manager.js",
   "scripts": {
-    "test": "mocha --reporter spec --require babel-core/register ./client/**/*.test.js"
+    "test": "NODE_ENV=test mocha --reporter spec --require babel-core/register ./client/base/lib/Pulser/**/*.test.js"
   },
   "author": "",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "request": "^2.88.0",
     "request-promise-native": "^1.0.5",
     "serialport": "^7.0.2",
+    "terser": "^3.14.0",
     "tmp": "0.0.33",
     "uglify-es": "^3.3.9"
   },
