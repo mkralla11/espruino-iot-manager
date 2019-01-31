@@ -190,7 +190,7 @@ const createStorageMock = function(){
           
           if(!r && a < 10){
             a++;
-            console.log(`err file write ${name}! retry...`)
+            // console.log(`err file write ${name}! retry...`)
             setTimeout(function(){
               store().resolve(resolve).reject(reject)
             }, 50);

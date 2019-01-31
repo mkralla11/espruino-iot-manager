@@ -40,8 +40,8 @@ function initOtaBooter({
     await setupEsp()
     const config = await compileOtaBooter()
     const sortedFileListConfig = pluck(1)(config.sortedConfig)
-    await initializeDefaultWifiUsernameAndPassword(WIFI_USERNAME, WIFI_PASSWORD, CDN_URL)
     await initializeFsArea()
+    await initializeDefaultWifiUsernameAndPassword(WIFI_USERNAME, WIFI_PASSWORD, CDN_URL)
     // await smartDelBootLoader(sortedFileListConfig)
     await storeBooterFileListFromConfigOnDevice(sortedFileListConfig)
     await storeBooterScriptsFromConfigOnDevice(sortedFileListConfig)
@@ -91,10 +91,13 @@ function initOtaBooter({
     await runExpression(port, expr)
   }
 
+        // require('Storage').eraseAll();
+        // E.flashFatFS({ format: true });
+         // ESP32.enableBLE(false);
   async function initializeFsArea(){
     const expr = `
       (function(){try {
-        var fs = require('fs')
+        var fs = require('fs');
         fs.readdirSync();
        } catch (e) { //'Uncaught Error: Unable to mount media : NO_FILESYSTEM'
         console.log('Formatting FS - only need to do once');
@@ -105,7 +108,9 @@ function initOtaBooter({
   }
 
 
-  async function initializeDefaultWifiUsernameAndPassword(u, p, cdnUrl){
+  async function initializeDefaultWifiUsernameAndPassword(u, p){
+    const cdnUrl = await computeCdnUrl()
+    console.log('storing cdn url', cdnUrl)
     if(u && p){
       const expr = `
         (function(){
@@ -198,7 +203,6 @@ function initOtaBooter({
         }]
       }
     )
-
     console.log('flashing FlashLoader runtime:', flashLoaderRuntime)
     expr = "require('Storage').write('.bootcde', " + JSON.stringify(flashLoaderRuntime) + "),reset(),load()"
 
@@ -212,10 +216,15 @@ function initOtaBooter({
     return await genConfigFromPath(clientBooterPath)
   }
 
-  async function genConfigFromPath(src){
+  async function computeCdnUrl(){
     let ip = await fetchLocalIp()
     ip = `http://${ip}`
     const cdnUrlPort = CDN_URL_PORT ? `:${CDN_URL_PORT}` : ''
+    return `${CDN_URL || ip}${cdnUrlPort}`
+  }
+
+  async function genConfigFromPath(src){
+    const cdnUrl = await computeCdnUrl()
 
     const config = await transform(
       src, 
@@ -225,7 +234,7 @@ function initOtaBooter({
         replace: [
           {
             rgx: /process.env.CDN_URL/,
-            replaceWith: `"${CDN_URL || ip}${cdnUrlPort}"`
+            replaceWith: `"${cdnUrl}"`
           },
           {
             rgx: /process.env.WIFI_USERNAME/,

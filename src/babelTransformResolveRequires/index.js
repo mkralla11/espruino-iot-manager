@@ -1,6 +1,6 @@
 const path = require('path')
 const fs = require('fs-extra')
-const babel = require("babel-core")
+const babel = require("@babel/core")
 // const shortid = require('shortid')
 const {promisify} = require('util')
 const rp = require('request-promise-native')
@@ -246,6 +246,12 @@ async function transformAndFollow(src, options){
       }
       config.totalBytes = getBytesTotal(config.code)
     }
+
+    for(const [moduleName, config] of entries){
+      if(config.native){
+        delete cache[moduleName]
+      }
+    }
   }
 
   function createGetFilenameIdRequireViaModNameFromCache({moduleName: parentModuleName, captureIdx}){
@@ -325,8 +331,8 @@ async function transformAndFollow(src, options){
   logStats()
 
 
-
-  cache[src].entryPoint = true
+  // console.log(cache)
+  // cache[src].entryPoint = true
   console.log('completed transform!', cache)
   return cache
 }

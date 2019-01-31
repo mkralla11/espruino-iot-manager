@@ -16,7 +16,7 @@ const comp = {
       return true
     }
     catch(e){
-      console.log(`could not write ${name}!`, e)
+      console.log(`write ${name}!`, e)
       if(f){
         f.close()
       }
@@ -34,7 +34,7 @@ const comp = {
       return data
     }
     catch(e){
-      console.log(`could not read ${name}!`, e)
+      console.log(`read ${name}!`, e)
       if(f){
         f.close()
       }
@@ -50,7 +50,7 @@ const comp = {
         
         if(!data && data !== '' && a < 10){
           a++;
-          console.log(`err file read ${name}! retry...`)
+          console.log(`read ${name}! retry...`)
           setTimeout(readNow, 50)
         }
         else if(a >= 10){
@@ -87,7 +87,7 @@ const comp = {
         
         if(!r && a < 10){
           a++;
-          console.log(`err file write ${name}! retry...`)
+          console.log(`write ${name}! retry...`)
           setTimeout(store, 50)
         }
         else if(a >= 10){

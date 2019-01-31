@@ -18,7 +18,7 @@ module.exports = function booter({
   const M = modules()
   let activeFlowId
   let atmpts = 1
-
+  const Pulser = require('../Pulser')
 
   const bootLocal = require('../bootLocal')
   const delay = require('../delay')
@@ -65,7 +65,7 @@ module.exports = function booter({
         .catch((e)=>{
           if(retryErr && failedAtmpts < 5){
             failedAtmpts++;
-            console.log('dead error occurred!', e)
+            // console.log('dead error occurred!', e)
             setTimeout(()=>{
               run()
             }, retryWait)
@@ -85,9 +85,10 @@ module.exports = function booter({
         return bootLocal({S, M, get, cdnUrl})
       }).then(()=>{
         // console.log('second')
+        Pulser({pin: D12, total: 6, onDur: 100, waitPrevMax: 0})
         return fetchFlow(flowId)
       }).catch((e)=>{
-        console.log('bootflow man!', e)
+        console.log('bootflow fail!', e)
       })
   }
 
@@ -128,7 +129,7 @@ module.exports = function booter({
                 try{
                   // ['fff1', 'fff2', 'fff3']
                   hshs.push(hsh)
-                  console.log('n hshs', hshs)
+                  // console.log('n hshs', hshs)
                   // 
                   return S.writeRetry('mnf_hsh', JSON.stringify(hshs)).then(()=>{
                     return S.writeRetry(hsh, JSON.stringify(data))
@@ -173,7 +174,7 @@ module.exports = function booter({
             // have to do with no internet connection 
             if(e && e.errorType !== 'INTERNET'){
               atmpts += 1
-              console.log('retrying on bad error', e)
+              // console.log('retrying on bad error', e)
             }
             // console.log('trying again')
             return flowId === activeFlowId ? retry() : undefined
@@ -187,6 +188,7 @@ module.exports = function booter({
     })
   }
 
+  Pulser({pin: D12, loop: true, onDur: 400})
   return run().then(()=>{
     return {
       checkUpdates: fetchFlow

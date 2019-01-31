@@ -14,6 +14,12 @@
 
 E.on('init', function() {
   const S = require("Storage")
+  const w = require("Wifi")
+  // always reconnect manually
+  // to ensure our callbacks are called
+  w.save('clear')
+  w.disconnect()
+
   let files
   try{
     let f = S.read(process.env.FILE_LIST_KEY_NAME)
@@ -23,39 +29,44 @@ E.on('init', function() {
     files = {fileList: []}
   }
 
-  function addModule(name, atmpt=0){
-    return new Promise((resolve, reject)=>{
-      if(atmpt > 5){
-        return reject(`Too Many attempts loading ${name}`)
-      }
-      setTimeout(()=>{
-        console.log('adding', name)
-        let data
-        try{
-          data = S.read(name)
-          Modules.addCached(name, data)
-          console.log(`success! ${name}`)
-          resolve()
-        }
-        catch(e){
-          console.log('error!, trying again', name, data, e)
-          console.log(process.memory())
-          atmpt += 1
-          addModule(name, atmpt).then(resolve).catch(reject)
-        }
-      }, 100)
-    })
-  }
 
+  let val, name, atmpt=0
   let fileList = files.fileList
 
-  function addModules(){
-    const mod = fileList.shift()
-    if(mod){
-      addModule(mod).then(()=>{
-        addModules()
-      })
+  function addModule(){
+    if(!name){
+      name = fileList.shift()
+      atmpt = 0
     }
+    if(!name){
+      console.log('main boot complete')
+      return
+    }
+
+    if(atmpt > 5){
+      throw new Error(`Too Many attempts loading ${name}`)
+    }
+
+      // console.log('adding', name)
+      digitalWrite(D12,  !val)
+      let data
+      try{
+        data = S.read(name)
+        Modules.addCached(name, data)
+        // console.log(`success! ${name}`)
+        // nullify name so the next name will be
+        // processed
+        name = null
+        setTimeout(addModule, 100)
+      }
+      catch(e){
+        console.log('error!, trying again', name, data, e)
+        console.log(process.memory())
+        atmpt += 1
+        setTimeout(addModule, 200)
+      }
   }
-  addModules()
+
+  console.log('starting main boot')
+  addModule()
 })

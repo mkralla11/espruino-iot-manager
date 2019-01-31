@@ -47,13 +47,13 @@ function smartWifi(opts){
               // all other attempts should only try connecting if 
               // the current status is NOT CONNECTED
               const {ssid, options} = cred || {}
-              console.log('trying to connect...')
+              console.log('trying to connect...', ssid)
               if(details.status === 'connected' && ssid && ssid === details.ssid){
                 console.log('already connected!', ssid)
                 resolve()
               }
               else if(curCredIdx === 0 || attemptId === that.attemptId && cred){
-
+                console.log('real con', ssid)
                 that.aConnect(ssid, options).then(()=>{
                   attemptId === that.attemptId ? resolve() : null
                 }).catch((e)=>{
@@ -80,7 +80,7 @@ function smartWifi(opts){
 
       callAndRmCbs(e){
         e ? e.errorType = "WIFI" : null
-        // console.log('calling callbacks', this.creds)
+        console.log('cbs', this.creds)
         this.creds.forEach((cred)=>{
           const {cbs} = cred
           cred.cbs = []

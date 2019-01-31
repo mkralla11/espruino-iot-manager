@@ -1,15 +1,15 @@
 
 let tId, queue=[], iId
 
-module.exports = function(type, opts){
+module.exports = function(opts){
   const write = opts.write || digitalWrite
-  function pulse({pin, dur, endOn, total=3, onDur=200, offDir=200, waitPrevMax=2000}={}){
+  function pulse({pin, dur, endOn, total=3, loop, onDur=200, offDur=200, waitPrevMax=2000}={}){
     function exec(lastVal){
       const val = !lastVal
       if(total > 0){
-        total--
+        !loop ? total-- : null
         write(pin, val)
-        const dur = val ? onDur : offDir
+        const dur = val ? onDur : offDur
         // console.log('dur', dur)
         tId = setTimeout(()=>
           exec(val)
@@ -94,7 +94,7 @@ module.exports = function(type, opts){
 
 
 
-  switch(type){
+  switch(opts.type){
     case "PULSE":
       return queuePulse(opts)
     default:

@@ -12,14 +12,14 @@ module.exports = function atmptCon({S, connect, wifiUsername, wifiPassword}){
     }
     connect(u, {password: pswrd}, (e)=>{
       if(e){
-        console.log('could not conn in atmptCon!', e)
+        // console.log('could not conn in atmptCon!', e)
         return reject(e)
       }
       resolve()
     })
     }
     catch(e){
-      console.log('atmptCon error loading creds', e)
+      // console.log('atmptCon error loading creds', e)
       Promise.reject(e)
     }
   })

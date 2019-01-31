@@ -1,6 +1,6 @@
-const babel = require("babel-core")
+const babel = require("@babel/core")
 const {promisify} = require('util')
-const UglifyJS = require("uglify-js")
+const Terser = require("terser")
 
 const tranformFileAsync = promisify(babel.transformFile.bind(babel))
 
@@ -21,6 +21,6 @@ module.exports = async function transformRuntime(filepath, opts={}){
       code = code.replace(replaceConfig.rgx, replaceConfig.replaceWith)
     }
   }
-  ({code} = UglifyJS.minify(code));
+  ({code} = Terser.minify(code));
   return code;
 }

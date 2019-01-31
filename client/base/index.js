@@ -1,6 +1,5 @@
-const booter = require('./lib/booter')
-
-// E.on('init', function() {
+(function(){
+  const booter = require('./lib/booter')
   booter({
     modules(){
       return Modules
@@ -22,5 +21,4 @@ const booter = require('./lib/booter')
     cdnUrl: require('Storage').read('D_CDN'),
     wifiUsername: require('Storage').read('D_WU'),
     wifiPassword: require('Storage').read('D_WP')
-  })
-// })
+})})()

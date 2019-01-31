@@ -4,10 +4,10 @@ module.exports = function({src}){
     comments: false,
     "presets": [
       [
-        require.resolve("babel-preset-env"),
+        require.resolve("@babel/preset-env"),
         {
           "targets": {
-            "node": "1"
+            "node": "10"
           }
         }
       ]
@@ -20,13 +20,15 @@ module.exports = function({src}){
         }
       ],
       [
-        require.resolve("babel-plugin-transform-for-of-as-array"), 
+        require.resolve("@babel/plugin-transform-spread"), 
         {
-          "loose": true
+          "useBuiltIns": true
         }
       ],
-      require.resolve("babel-plugin-syntax-dynamic-import"),
-
+      require.resolve("@babel/plugin-transform-computed-properties"),
+      require.resolve("@babel/plugin-transform-shorthand-properties"),
+      require.resolve("@babel/plugin-transform-parameters"),
+      require.resolve("@babel/plugin-transform-destructuring")
     ]
   }
 }
