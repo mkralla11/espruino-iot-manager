@@ -183,7 +183,7 @@ async function transformAndFollow(src, options){
 
   const espWhitelist = ['http', 'Storage', 'fs', 'Wifi', 'crypto', 'net', 'ws']
   function isInEspruinoCoreWhitelist(moduleName){
-    for(curMod of espWhitelist){
+    for(let curMod of espWhitelist){
       if(moduleName === curMod){
         return true
       }

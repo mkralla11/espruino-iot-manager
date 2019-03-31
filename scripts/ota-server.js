@@ -15,9 +15,9 @@ function setup(){
     if(err){
       throw err
     }
-    devServerIp = devServerIp.replace(/\r?\n|\r/, '')
-    const devServer = initDevServer({port, src, devServerIp})
+    // devServerIp = devServerIp.replace(/\r?\n|\r/, '')
+    const devServer = initDevServer({port, src})
 
-    devServer.run()
+    devServer.runLocalServer()
   })
 }
