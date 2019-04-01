@@ -91,31 +91,37 @@ async function transformAndFollow(src, options){
     }
     else{
 
+      if(requiredFrom){
+        let {found, src} = await getFilepath(curSrc, requiredFrom)
 
-      let {found, src} = await getFilepath(curSrc, requiredFrom)
 
 
+        if(found){
+          cache[src] = cache[src] || {required: []}
 
-      if(found){
-        cache[src] = cache[src] || {required: []}
-        if(requiredFrom === entryPoint){
-          cache[src].entryPoint = true
+
+          cache[requiredFrom].required.push(src) 
+
+          if(cache[src].isLoading){
+            return
+          }
+          cache[src].isLoading = true
+          cache[src].src = src
+
+
+          await loadNormalModule(src)
         }
         else{
-          cache[requiredFrom].required.push(src) 
+          throw new Error(`Module not found and is not esp module: ${curSrc}`)
         }
-
-        if(cache[src].isLoading){
-          return
-        }
-        cache[src].isLoading = true
-        cache[src].src = src
-
-
-        await loadNormalModule(src)
       }
       else{
-        throw new Error(`Module not found and is not esp module: ${curSrc}`)
+        // Handle entryPoint, it will not have a requiredFrom
+        let {found, src} = await getFilepath(curSrc, curSrc)
+        cache[src] = cache[src] || {required: []}
+        cache[src].entryPoint = true
+        cache[src].src = src
+        await loadNormalModule(src)
       }
     }
   }
@@ -257,7 +263,6 @@ async function transformAndFollow(src, options){
   function createGetFilenameIdRequireViaModNameFromCache({moduleName: parentModuleName, captureIdx}){
     return (match, ...captures)=>{
       let moduleName = captures[captureIdx]
-
       if(!cache[moduleName]){
         let moduleNameDir = parentModuleName
         let turnIntoDir
@@ -285,6 +290,10 @@ async function transformAndFollow(src, options){
       }
 
       try{
+        if(!cache[moduleName].filenameId){
+          throw new Error(`filenameId does not exist for ${moduleName}`)
+        }
+
         if(moduleName !== parentModuleName){
           return `require('${cache[moduleName].filenameId}')`
         }
@@ -325,7 +334,7 @@ async function transformAndFollow(src, options){
 
 
   
-  await transform(src, src)
+  await transform(src, undefined)
   await addFilenameIdsToCacheConfigsAndUpdate()
   throwIfCodeOverTotalAllowedBytes()
   logStats()
@@ -374,7 +383,7 @@ function addPositions(cache){
   addPositionAndFollow(entrySrc)
   
 
-  function addPositionAndFollow(curSrc, curTree){
+  function addPositionAndFollow(curSrc){
     cache[curSrc].position = position
     console.log(curSrc, position)
     // if(processed[curSrc]){
