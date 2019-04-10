@@ -64,9 +64,13 @@ function devServer({port, src, namespacePath='/', asyncRead: externalAsyncRead})
         throw new Error('INCORRECT_NAMESPACE_PATH')
       }
 
-      const endPath = filePath.slice(namespacePathLength, filePath.length)
+      let endPath = filePath.slice(namespacePathLength, filePath.length)
       console.log('end path', endPath)
+      if(endPath[0] !== '/'){
+        endPath = '/' + endPath
+      }
       const read = externalAsyncRead || asyncRead
+      debugger
       const content = await read(endPath)
       res.writeHead(200, {'Content-Type': contentType})
       res.end(content, 'utf-8')

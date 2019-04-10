@@ -25,6 +25,15 @@ module.exports = function({src}){
           "useBuiltIns": true
         }
       ],
+      [
+        require.resolve("babel-plugin-transform-inline-environment-variables"), 
+        {
+          "include": [
+            "NODE_ENV",
+            "DEV_SERVER_IP"
+          ]
+        }
+      ],
       require.resolve("@babel/plugin-transform-computed-properties"),
       require.resolve("@babel/plugin-transform-shorthand-properties"),
       require.resolve("@babel/plugin-transform-parameters"),
