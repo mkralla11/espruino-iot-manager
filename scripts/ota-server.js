@@ -26,7 +26,6 @@ async function setup(){
   catch(e){
     console.warn('Could not provide ip address for process.env.DEV_SERVER_IP')
   }
-  debugger
 
 
   // devServerIp = devServerIp.replace(/\r?\n|\r/, '')

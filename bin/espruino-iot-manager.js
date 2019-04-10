@@ -18,7 +18,7 @@ switch (script) {
     const result = spawn.sync(
       'node',
       nodeArgs
-        .concat('--inspect-brk')
+        // .concat('--inspect-brk')
         .concat(require.resolve('../scripts/' + script))
         .concat(args.slice(scriptIndex + 1)),
       { stdio: 'inherit' }
