@@ -12,8 +12,8 @@ module.exports = function atmptCon({S, connect, wifiUsername, wifiPassword}){
     }
     connect(u, {password: pswrd}, (e)=>{
       if(e){
-        // console.log('could not conn in atmptCon!', e)
-        return reject(e)
+        console.log('could not conn in atmptCon! resolve anyways', e)
+        return resolve(e)
       }
       resolve()
     })
