@@ -349,8 +349,8 @@ async function transformAndFollow(src, options){
 async function getFilepath(src, requiredFrom){
   try{
     requiredFrom = requiredFrom.replace(/\/index\.js$/, "")
-    console.log('requiredFrom and src', requiredFrom, src)
-    src = require.resolve(src, {paths: [requiredFrom]})
+    // console.log('requiredFrom and src', requiredFrom, src)
+    src = require.resolve(src, {paths: [requiredFrom, path.dirname(requiredFrom)]})
     return {found: true, src}
   }
   catch(e){
