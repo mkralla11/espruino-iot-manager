@@ -28,10 +28,9 @@ module.exports = function({src}){
       [
         require.resolve("babel-plugin-transform-inline-environment-variables"), 
         {
-          "include": [
-            "NODE_ENV",
-            "DEV_SERVER_IP",
-            "API_DOMAIN"
+          "exclude": [
+            // "NODE_ENV",
+            // "DEV_SERVER_IP"
           ]
         }
       ],
