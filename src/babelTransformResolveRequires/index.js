@@ -113,7 +113,7 @@ async function transformAndFollow(src, options){
         }
         else{
           console.log('problem', curSrc, requiredFrom)
-          console.log(module.resolve.paths(curSrc))
+          console.log(require.resolve.paths(curSrc))
           console.log('cwd', process.cwd())
           try{
             const items = await fs.readdir(path.dirname(requiredFrom))
