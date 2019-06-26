@@ -35,7 +35,6 @@ module.exports = async (src, options={}) => {
   
 
 
-
   let config = await transformAndFollow(src, options)
   return config
 }
@@ -282,10 +281,16 @@ async function transformAndFollow(src, options){
           }
         }
         try{
-          moduleName = require.resolve(moduleName, {paths: [moduleNameDir]})
+          try{
+            moduleName = require.resolve(`./${moduleName}`, {paths: [moduleNameDir]})
+          }
+          catch(e){
+            moduleName = require.resolve(moduleName, {paths: [moduleNameDir]})
+          }
         }
         catch(e){
           console.log('error in createGetFilenameIdRequireViaModNameFromCache', e)
+          throw e
         }
       }
 
