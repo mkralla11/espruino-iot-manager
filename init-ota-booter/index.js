@@ -9,7 +9,6 @@ const sortCompiledScriptConfig = require('../src/sortCompiledScriptConfig')
 const loadAndMinify = require('../dev-babel-pusher/loadAndMinify')
 const generateFileListFromSortedConfig = require('../src/generateFileListFromSortedConfig')
 const {pluck} = require('ramda')
-const UglifyJS = require("uglify-js")
 
 // const fsUnlinkFuncStr = `require('fs').unlinkSync`
 // const fsWriteFileFuncStr = `require('fs').writeFile`

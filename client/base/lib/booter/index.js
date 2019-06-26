@@ -11,7 +11,7 @@ module.exports = function booter({
   load,
   retryErr=true,
   retryChgMax=Infinity,
-  retryWait=5000
+  retryWait=7000
 }){
   const S = storage()
   const H = http()
@@ -74,13 +74,14 @@ module.exports = function booter({
   }
 
   function bootFlow(flowId){
-    return atmptCon({
+    return stopAP().then(()=>{
+      return atmptCon({
           S,
           connect: smartWifi({wifi, random}).connect,
           wifiPassword,
           wifiUsername
       })
-      .then(()=>{
+      }).then(()=>{
         // console.log('first')
         return bootLocal({S, M, get, cdnUrl})
       }).then(()=>{
@@ -90,6 +91,13 @@ module.exports = function booter({
       }).catch((e)=>{
         console.log('bootflow fail!', e)
       })
+  }
+  function stopAP(){
+    return new Promise((resolve)=>{
+      wifi().stopAP(()=>{
+        resolve()
+      })
+    })
   }
 
 
@@ -103,17 +111,19 @@ module.exports = function booter({
         function hasWifi(){
           return require('../smartWifi')().hasWifi()
         }
-
+        console.log('retrying...')
         if(global.PREVENT_CODE_UPDATE){
+          console.log('retry prevented', global.PREVENT_CODE_UPDATE)
           retryAgain()
           return
         }
-        if(require('Wifi').getStatus().mode === 'AP' || !hasWifi()){
-          // console.log('in AP mode...')
+        const mode = require('Wifi').getStatus().mode
+        if(mode === 'AP' || mode === 'APSTA' || !hasWifi()){
+          console.log('in AP mode or no wifi...')
           retryAgain()
           return
         }
-
+        console.log('retry a-go')
         get(cdnUrl + '/manifest_hash')
         .then((hsh)=>{
           try{
@@ -149,7 +159,7 @@ module.exports = function booter({
                 }
               }).catch((e)=>{
                 // console.log('fetchFlow fail!', e)
-                retryAgain(e)
+                retryAgain({errorType: 'INTERNET'})
               })
             }
             else{
@@ -172,7 +182,7 @@ module.exports = function booter({
             // only increment atmpts if 
             // there was an error and it doesn't
             // have to do with no internet connection 
-            if(e && e.errorType !== 'INTERNET'){
+            if(e && e.errorType !== 'INTERNET' && retryChgMax !== Infinity){
               atmpts += 1
               // console.log('retrying on bad error', e)
             }

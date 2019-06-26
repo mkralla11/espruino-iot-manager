@@ -7,7 +7,7 @@ const { exec } = require('child_process')
 const esp = require("espruino")
 const path = require('path')
 const fs = require('fs')
-const UglifyJS = require("uglify-js")
+// const UglifyJS = require("uglify-js")
 const watchSrc = argOrDefault(process.argv, '--watch-src', process.cwd() + '/src')
 
 const port = argOrDefault(process.argv, '--port', '/dev/tty.SLAB_USBtoUART')

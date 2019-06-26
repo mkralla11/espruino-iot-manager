@@ -133,6 +133,6 @@ module.exports =function bootLocal({S, M, get, cdnUrl}){
     // run modules from flash
     return execFiles()
   }).catch((e)=>{
-    // console.log('exec error', e)
+    console.log('exec error', e)
   })
 }
