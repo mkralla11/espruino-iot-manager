@@ -112,6 +112,18 @@ async function transformAndFollow(src, options){
           await loadNormalModule(src)
         }
         else{
+          console.log('problem', curSrc, requiredFrom)
+          console.log(module.resolve.paths(curSrc))
+          console.log('cwd', process.cwd())
+          try{
+            const items = await fs.readdir(path.dirname(requiredFrom))
+            console.log(items)
+          }
+          catch(e){
+            console.log("couldn't read dir", requiredFrom)
+          }
+
+
           throw new Error(`Module not found and is not esp module: ${curSrc}`)
         }
       }
