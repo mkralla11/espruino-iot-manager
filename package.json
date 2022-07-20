@@ -41,7 +41,7 @@
     "request": "^2.88.0",
     "request-promise-native": "^1.0.5",
     "serialport": "^7.0.2",
-    "terser": "^3.14.0",
+    "terser": "^4.8.1",
     "tmp": "0.0.33"
   },
   "devDependencies": {
